@@ -45,6 +45,12 @@ git merge <nome_da_branch> -> trazer as informacoes da branch secundaria para a 
 
 git branch -d <nome_da_branch> -> deleta a branch
 
+git --help -> mostra todos os commandos
+
+git push origin main -> da o upload dos arquivos da maquina para o github
+
+git pull origin main -> no GitHub, pega as alterações das branchs e merge com a main
+
 ### FLUXO DE TRABALHO
 
 1. criar o diretorio do projeto
