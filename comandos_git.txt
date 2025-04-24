@@ -1,0 +1,58 @@
+### COMANDOS BASH
+
+ls -> lista arquivos
+
+cd -> move entre diretórios
+
+pwd -> mostra diretório de trabalho
+
+cd .. -> sobe de pasta (acima da atual)
+
+mkdir -> cria pasta
+
+rm -rf -> deleta uma pasta 
+
+cat -> exibe conteúdo do arquivo
+
+
+### COMANDOS GIT
+
+git init . -> 		cria uma repo git na pasta atual
+
+git status -> 		mostra o status do trabalho (cada arquivo)
+
+git add nome_arquivo -> adiciona o arquivo para ser commitado
+
+git commit -m "msg" -> 	faz commit do que estava para ser commitado
+
+git log -> 		mostra todo o histórico dos commit
+
+git add . -> 		adiciona todos os arquivos desta pasta
+
+git add comandos_* -> 	tudo que termina em comandos_
+
+git diff <nome_arquivo> -> mostra oq foi modificado no arquivo desde o ultimo commit
+
+git reset <nome_arquivo> -> retira o arquivo do commit depois que adicionado
+
+git checkout <nome_da_branch> -> muda de branch
+
+git checkout -b <nome_da_branch> -> muda e cria uma nova de branch
+
+git branch -> 		mostra as branchs
+
+git merge <nome_da_branch> -> trazer as informacoes da branch secundaria para a branch main
+
+git branch -d <nome_da_branch> -> deleta a branch
+
+### FLUXO DE TRABALHO
+
+1. criar o diretorio do projeto
+2. iniciar o git dentro do diretorio criado (git init .)
+3. edita ou cria arquivos
+4. git status
+5. git add <nome arquivo>
+6. git status
+7. git commit -m "mensagem"
+8. git status
+9. volta passo 3
