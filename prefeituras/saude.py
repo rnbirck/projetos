@@ -191,25 +191,17 @@ df_obitos_causas_definidas = (
 )
 
 # Acidentes de trabalho - arquivo taxa_notif_acidentes_trab.xls
-df_acidentes_trab = (
-    processar_saude_mensal_raw(
-        "taxa_notif_acidentes_trab.xls",
-        caminho,
-        ["Unnamed: 0", "Unnamed: 1", "Unnamed: 2"],
-        substituir_mes_saude,
-    )[["ano", "mes", "Município", "Nº Norificações", "População"]]
-    .rename(
-        columns={
-            "Município": "municipio",
-            "Nº Norificações": "notificacoes_acidentes_trab",
-            "População": "populacao",
-        }
-    )
-    .assign(
-        taxa_acidentes_trab=lambda x: x["notificacoes_acidentes_trab"]
-        / x["populacao"]
-        * 1000
-    )
+df_acidentes_trab = processar_saude_mensal_raw(
+    "taxa_notif_acidentes_trab.xls",
+    caminho,
+    ["Unnamed: 0", "Unnamed: 1", "Unnamed: 2"],
+    substituir_mes_saude,
+)[["ano", "mes", "Município", "Nº Norificações", "População"]].rename(
+    columns={
+        "Município": "municipio",
+        "Nº Norificações": "notificacoes_acidentes_trab",
+        "População": "populacao",
+    }
 )
 
 # DataFrame Final
@@ -235,8 +227,14 @@ df_saude_mensal.loc[mask_2025, "populacao"] = df_saude_mensal.loc[
 ].map(pop_2024)
 
 # Recalcular colunas dependentes de populacao
-df_saude_mensal["nascimentos/1000_hab"] = (
-    df_saude_mensal["nascimentos"] / df_saude_mensal["populacao"] * 1000
+
+df_saude_mensal = df_saude_mensal.assign(
+    **{
+        "nascimentos/1000_hab": lambda x: x["nascimentos"] / x["populacao"] * 1000,
+        "taxa_acidentes_trab": lambda x: x["notificacoes_acidentes_trab"]
+        / x["populacao"]
+        * 1000,
+    }
 )
 
 df_saude_mensal.to_csv(

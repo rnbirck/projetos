@@ -12,7 +12,7 @@ banco = "cei"
 engine = create_engine(f"mysql+pymysql://{usuario}:{senha}@{host}/{banco}")
 
 ano = 2025
-mes = 2
+mes = 3
 
 breaks = [10, 15, 18, 25, 30, 40, 50, 65, float("inf")]
 labels = ["1", "2", "3", "4", "5", "6", "7", "8"]
@@ -83,48 +83,10 @@ trad_mun = pd.read_sql_query(
     "SELECT id_municipio, id_municipio_6 FROM municipio", engine
 )
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-diretorio_base = os.path.join(script_dir, "data", "caged")
-os.makedirs(diretorio_base, exist_ok=True)
-anos = range(ano, ano + 1)
-meses = range(mes, mes + 1)
-tipos = ["FOR", "MOV", "EXC"]
-
-for ano in anos:
-    for mes in meses:
-        for tipo in tipos:
-            mes_str = str(mes).zfill(2)
-            arquivo_7z = (
-                f"CAGED{tipo}{ano}{mes_str}.7z"  # definindo o nome do arquivo .7z
-            )
-            caminho_7z = os.path.join(
-                diretorio_base, arquivo_7z
-            )  # definindo o caminho do arquivo .7z
-            try:
-                ftp = FTP("ftp.mtps.gov.br")
-                ftp.login()
-                ftp.cwd(f"/pdet/microdados/NOVO CAGED/{ano}/{ano}{mes_str}/")
-                with open(caminho_7z, "wb") as f:
-                    ftp.retrbinary(f"RETR {arquivo_7z}", f.write)
-                ftp.quit()
-                print(f"Arquivo {arquivo_7z} baixado com sucesso.")
-                # criar o subdiretorio para extracao
-                diretorio_extracao = os.path.join(diretorio_base, f"{ano}{mes_str}")
-                os.makedirs(diretorio_extracao, exist_ok=True)
-                # extrair o arquivo .7z
-                with py7zr.SevenZipFile(caminho_7z, mode="r") as z:
-                    z.extractall(path=diretorio_extracao)
-                # listar arquivos extraidos
-                arquivos_extraidos = os.listdir(diretorio_extracao)
-                print(
-                    f"Arquivos extraídos para {diretorio_extracao}: {arquivos_extraidos}"
-                )
-            except Exception as e:
-                print(f"Erro ao processar {arquivo_7z}: {e}")
-
 
 def leitura_arquivos(tipo):
     list_df = []
+    base_path = os.path.join(os.path.dirname(__file__), "data", "caged")
     for ano in anos:
         for mes in meses:
             # Formatar o mês com dois dígitos
@@ -143,12 +105,9 @@ def leitura_arquivos(tipo):
                 "tipomovimentação",
                 "salário",
             ]
-
             arquivo = f"CAGED{tipo}{ano}{mes_formatado}.txt"
-            caminho_arquivo = (
-                f"C:/Users/rnbirck/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/Prefeituras/Emprego e Renda/CAGED/data/{ano}{mes_formatado}/"
-                + arquivo
-            )
+            pasta = f"{ano}{mes_formatado}"
+            caminho_arquivo = os.path.join(base_path, pasta, arquivo)
             # Identifica os arquivos lidos
             # Lê o arquivo CSV usando o delimitador ";"
 
@@ -246,11 +205,53 @@ def ajuste_caged_cnae(df, trad_mun):
     )
 
 
+script_dir = os.path.dirname(os.path.abspath(__file__))
+diretorio_base = os.path.join(script_dir, "data", "caged")
+os.makedirs(diretorio_base, exist_ok=True)
+anos = range(ano, ano + 1)
+meses = range(mes, mes + 1)
+tipos = ["FOR", "MOV", "EXC"]
+
+for ano in anos:
+    for mes in meses:
+        for tipo in tipos:
+            mes_str = str(mes).zfill(2)
+            arquivo_7z = (
+                f"CAGED{tipo}{ano}{mes_str}.7z"  # definindo o nome do arquivo .7z
+            )
+            caminho_7z = os.path.join(
+                diretorio_base, arquivo_7z
+            )  # definindo o caminho do arquivo .7z
+            try:
+                ftp = FTP("ftp.mtps.gov.br")
+                ftp.login()
+                ftp.cwd(f"/pdet/microdados/NOVO CAGED/{ano}/{ano}{mes_str}/")
+                with open(caminho_7z, "wb") as f:
+                    ftp.retrbinary(f"RETR {arquivo_7z}", f.write)
+                ftp.quit()
+                print(f"Arquivo {arquivo_7z} baixado com sucesso.")
+                # criar o subdiretorio para extracao
+                diretorio_extracao = os.path.join(diretorio_base, f"{ano}{mes_str}")
+                os.makedirs(diretorio_extracao, exist_ok=True)
+                # extrair o arquivo .7z
+                with py7zr.SevenZipFile(caminho_7z, mode="r") as z:
+                    z.extractall(path=diretorio_extracao)
+                # listar arquivos extraidos
+                arquivos_extraidos = os.listdir(diretorio_extracao)
+                print(
+                    f"Arquivos extraídos para {diretorio_extracao}: {arquivos_extraidos}"
+                )
+            except Exception as e:
+                print(f"Erro ao processar {arquivo_7z}: {e}")
+
+
 df_mov = leitura_arquivos("MOV")
 df_for = leitura_arquivos("FOR")
 df_exc = leitura_arquivos("EXC")
+
 df_exc = df_exc.assign(saldomovimentação=lambda x: -x["saldomovimentação"])
 df = pd.concat([df_mov, df_for, df_exc], ignore_index=True)
+
 # Salvar no banco de dados
 df_caged_prefeituras = ajuste_caged_prefeituras(df, trad_mun).to_sql(
     "caged_prefeituras", con=engine, if_exists="append", index=False, chunksize=1000

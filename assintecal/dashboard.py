@@ -359,7 +359,7 @@ df_vendas_raw = sidra.get_table(
     table_code="8882",
     territorial_level="1",
     ibge_territorial_code="all",
-    period="201901-202501",
+    period="201901-202601",
     classifications={"11046": "56734", "85": "90673"},
     variable="11709, 11710",
 )
@@ -376,7 +376,7 @@ df_ipca_raw = sidra.get_table(
     table_code="7060",
     territorial_level="1",
     ibge_territorial_code="all",
-    period="202101-202501",
+    period="202101-202601",
     classification="315/7169,7604",
     variable="63,2265",
 )
@@ -403,7 +403,7 @@ df_industria_transformacao_raw = sidra.get_table(
     table_code="8888",
     territorial_level="1",
     ibge_territorial_code="all",
-    period="202101-202501",
+    period="202101-202601",
     classification="544/all",
     variable="11602, 11603",
 )
@@ -434,7 +434,7 @@ df_taxa_desemprego_raw = sidra.get_table(
     table_code="6318",
     territorial_level="1",
     ibge_territorial_code="all",
-    period="202101-202501",
+    period="202101-202601",
     classification="629/all",
     variable="1641",
 )
