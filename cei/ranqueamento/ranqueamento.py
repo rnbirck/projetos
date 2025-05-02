@@ -21,6 +21,10 @@ classificacao = pd.read_excel(
     engine="calamine",
 )
 
+dicionario_tipo_classificacao = (
+    classificacao[["var", "ordem"]].set_index("var")["ordem"].to_dict()
+)
+
 # Colunas Valor
 colunas_valor = classificacao.query("tipo == 'valor'")["var"].tolist()
 
@@ -103,6 +107,21 @@ df_variaveis_notas = pd.concat(
     ],
     axis=1,
 ).reset_index()
+
+# Ajustando as colunas de notas para as colunas de variaveis invertidas
+
+notas_invertidas = {5: -1, 3: 1, 1: 1, -1: 5, np.nan: np.nan}
+prefixo_nota = "nota_"
+colunas_nota_para_inverter = []
+
+for coluna in df_variaveis_notas.columns:
+    if coluna.startswith(prefixo_nota):
+        var_original = coluna[len(prefixo_nota) :]
+        if dicionario_tipo_classificacao.get(var_original) == "invertido":
+            colunas_nota_para_inverter.append(coluna)
+
+for coluna in colunas_nota_para_inverter:
+    df_variaveis_notas[coluna] = df_variaveis_notas[coluna].map(notas_invertidas)
 
 # Separando todas as colunas de var
 todas_colunas_base = classificacao["var"].tolist()
