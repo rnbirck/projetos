@@ -7,13 +7,13 @@ import importlib
 importlib.reload(utils)
 
 print("Iniciando ranqueamento")
-arquivo = "municipios"
+arquivo = "anfacer"
 
 base = pd.read_excel(
     f"bases/base_{arquivo}.xlsx",
     sheet_name="base_ranqueamento",
     engine="calamine",
-).replace(0, np.nan)
+)
 
 classificacao = pd.read_excel(
     f"bases/base_{arquivo}.xlsx",
@@ -24,6 +24,15 @@ classificacao = pd.read_excel(
 dicionario_tipo_classificacao = (
     classificacao[["var", "ordem"]].set_index("var")["ordem"].to_dict()
 )
+
+dicionario_bloco = {}
+if "bloco" in classificacao.columns and "var" in classificacao.columns:
+    try:
+        dicionario_bloco = (
+            classificacao[["var", "bloco"]].set_index("var")["bloco"].to_dict()
+        )
+    except Exception:
+        dicionario_bloco = {}
 
 # Colunas Valor
 colunas_valor = classificacao.query("tipo == 'valor'")["var"].tolist()
@@ -123,12 +132,17 @@ for coluna in df_variaveis_notas.columns:
 for coluna in colunas_nota_para_inverter:
     df_variaveis_notas[coluna] = df_variaveis_notas[coluna].map(notas_invertidas)
 
+# Calcular as médias e notas para os blocos, caso definidos:
+df_variaveis_blocos_notas = utils.calcular_notas_bloco(
+    df_variaveis_notas, dicionario_bloco
+)
+
 # Separando todas as colunas de var
 todas_colunas_base = classificacao["var"].tolist()
 
 # Ordenando o DataFrame com as variaveis e notas
 df_reordenada = utils.ordenar_df_com_notas(
-    df=df_variaveis_notas,
+    df=df_variaveis_blocos_notas,
     colunas_base=todas_colunas_base,
     sort_key_func=utils.sort_key,
     id_col="id",
@@ -139,6 +153,19 @@ df_final = utils.renomear_colunas_mapeadas(
     df=df_reordenada, map_df=classificacao, map_from_col="var", map_to_col="coluna"
 )
 
+# Calculando a média geral dos blocos, se existir
+colunas_nota_bloco = [col for col in df_final.columns if col.startswith("nota_bloco_")]
+if colunas_nota_bloco:
+    nome_nova_coluna = "media_geral_blocos"
+    try:
+        df_final[nome_nova_coluna] = df_final[colunas_nota_bloco].mean(
+            axis=1, skipna=True
+        )
+    except Exception:
+        if nome_nova_coluna in df_final.columns:
+            del df_final[nome_nova_coluna]
+
+# Salvando o arquivo
 arquivo_saida = f"resultados/ranqueamento_{arquivo}.xlsx"
 with pd.ExcelWriter(arquivo_saida) as writer:
     df_final.to_excel(writer, index=False, sheet_name="ranqueamento")

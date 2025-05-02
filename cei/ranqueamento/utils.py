@@ -28,14 +28,14 @@ def nota_valor_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
     nota_cols_final = []
 
     for col in colunas:
-        # Calcular Log Natural
-        log_col_name = f"{col}_ln"  # Nome da coluna de log
+        log_col_name = f"{col}_ln"
 
-        # Lidar com coluna original toda NaN ou com valores não positivos
-        if df[col].isnull().all() or (df[col] <= 0).any():
+        # Lidar com coluna original toda NaN
+
+        numeric_col_check = pd.to_numeric(df[col], errors="coerce")
+        if numeric_col_check.isnull().all():
             if log_col_name not in df.columns:
                 df[log_col_name] = np.nan
-            # Também criar colunas dependentes como NaN
             prob_ks_col = f"Prob_KS_{log_col_name}"
             mean_col = f"{log_col_name}_mean"
             sd_col = f"{log_col_name}_sd"
@@ -53,18 +53,17 @@ def nota_valor_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
                 if c_name not in df.columns:
                     df[c_name] = np.nan
             nota_cols_final.append(nota_col)
-
             if log_col_name in df.columns and df[log_col_name].isnull().all():
-                del df[log_col_name]
+                try:
+                    del df[log_col_name]
+                except KeyError:
+                    pass
             continue
 
         # Calcular log, tratando 0 e negativos como NaN
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            # Aplicar log apenas a valores > 0
-            df[log_col_name] = np.log(df[col].where(df[col] > 0))
-        # np.log já retorna NaN para não positivos com .where, e lida com inf/-inf
-        # Garantir que inf/-inf (caso ocorram por outros motivos) sejam NaN
+            df[log_col_name] = np.log(numeric_col_check.where(numeric_col_check > 0))
         df[log_col_name] = df[log_col_name].replace([np.inf, -np.inf], np.nan)
 
         # Teste de Normalidade (Lilliefors)
@@ -75,8 +74,7 @@ def nota_valor_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
             try:
                 ks_stat, p_value = lilliefors(data_for_ks, dist="norm")
             except Exception:
-                p_value = np.nan  # Em caso de erro no teste
-        # Adicionar p-valor como coluna constante
+                p_value = np.nan
         df[prob_ks_col] = p_value
 
         # Média e Desvio Padrão
@@ -84,7 +82,6 @@ def nota_valor_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
         sd_col = f"{log_col_name}_sd"
         col_mean = df[log_col_name].mean()
         col_sd = df[log_col_name].std(ddof=1)
-        # Adicionar como colunas constantes
         df[mean_col] = col_mean
         df[sd_col] = col_sd
 
@@ -101,12 +98,13 @@ def nota_valor_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
         # Cálculo da Nota (_1)
         nota_col = f"nota_{col}_1"
         nota_cols_final.append(nota_col)
-        df[nota_col] = np.nan  # Inicializar com NaN (SYSMIS)
+        df[nota_col] = np.nan
 
-        # Condição principal do p-valor
+        # Condicao para valores originais que eram não-NaN mas <= 0 (resultando em log NaN)
+        cond_zero_or_neg = numeric_col_check.notna() & df[log_col_name].isna()
+
         p_val_check = df[prob_ks_col].fillna(0) >= 0.05
 
-        # Condições baseadas nos limites
         cond1 = p_val_check & (df[log_col_name] < df[mean_minus_sd_col])
         cond2 = (
             p_val_check
@@ -120,11 +118,11 @@ def nota_valor_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
         )
         cond4 = p_val_check & (df[log_col_name] >= df[mean_plus_sd_col])
 
-        conditions = [cond1, cond2, cond3, cond4]
-        choices = [-1, 1, 3, 5]
-        df[nota_col] = np.select(conditions, choices, default=np.nan)
+        conditions = [cond_zero_or_neg, cond1, cond2, cond3, cond4]
 
-        # Limpeza de Colunas Intermediárias (Opcional)
+        choices = [-1, -1, 1, 3, 5]
+
+        df[nota_col] = np.select(conditions, choices, default=np.nan)
 
         cols_to_delete = [
             log_col_name,
@@ -136,10 +134,10 @@ def nota_valor_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
         ]
         for c_del in cols_to_delete:
             if c_del in df.columns:
-                try:  # Adicionar try/except para o caso de a coluna já ter sido removida ou não criada
+                try:
                     del df[c_del]
                 except KeyError:
-                    pass  # Ignorar se a coluna não existe
+                    pass
 
     # Selecionar colunas finais
     cols_to_keep_final = []
@@ -172,14 +170,13 @@ def nota_valor_2(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
     nota_cols_final = []
 
     for col in colunas:
-        # Calcular Log Natural ---
         log_col_name = f"{col}_ln"
 
-        # Lidar com coluna original toda NaN ou com valores não positivos
-        if df[col].isnull().all() or (df[col] <= 0).any():
+        # Lidar com coluna original toda NaN
+        numeric_col_check = pd.to_numeric(df[col], errors="coerce")
+        if numeric_col_check.isnull().all():
             if log_col_name not in df.columns:
                 df[log_col_name] = np.nan
-            # Criar colunas dependentes como NaN
             outlier_col = f"outlier_{col}"
             prob_ks_col = f"Prob_KS_{log_col_name}"
             mean_col = f"{log_col_name}_mean"
@@ -200,12 +197,15 @@ def nota_valor_2(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
                     df[c_name] = np.nan
             nota_cols_final.append(nota_col)
             if log_col_name in df.columns and df[log_col_name].isnull().all():
-                del df[log_col_name]
+                try:
+                    del df[log_col_name]
+                except KeyError:
+                    pass
             continue
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            df[log_col_name] = np.log(df[col].where(df[col] > 0))
+            df[log_col_name] = np.log(numeric_col_check.where(numeric_col_check > 0))
         df[log_col_name] = df[log_col_name].replace([np.inf, -np.inf], np.nan)
 
         # Média e Desvio Padrão Gerais
@@ -213,31 +213,23 @@ def nota_valor_2(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
         sd_col = f"{log_col_name}_sd"
         col_mean = df[log_col_name].mean()
         col_sd = df[log_col_name].std(ddof=1)
-
         df[mean_col] = col_mean
         df[sd_col] = col_sd
 
         # Cálculo do Z-Score
-        # Usar série temporária para cálculo
         temp_z_score_col = pd.Series(np.nan, index=df.index)
         if pd.notna(col_sd) and col_sd != 0:
             temp_z_score_col = (df[log_col_name] - col_mean) / col_sd
-        # Não adicionamos Z-score ao df permanentemente
 
         # Identificação de Outliers (Threshold +/- 3)
         outlier_col = f"outlier_{col}"
         df[outlier_col] = np.nan
-
         df.loc[df[log_col_name].notna(), outlier_col] = 0
-
         df.loc[temp_z_score_col < -3, outlier_col] = 1
-
         df.loc[temp_z_score_col > 3, outlier_col] = 2
 
         # Filtragem TEMPORÁRIA para K-S (Z entre -3 e 3)
-        ks_filter_mask = (
-            df[log_col_name].notna() & (temp_z_score_col > -3) & (temp_z_score_col < 3)
-        )
+        ks_filter_mask = df[outlier_col] == 0
         data_for_ks_filtered = df.loc[ks_filter_mask, log_col_name]
 
         # Realizar Teste K-S (Lilliefors) nos dados filtrados
@@ -249,8 +241,6 @@ def nota_valor_2(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
                 )
             except Exception:
                 p_value_filtered = np.nan
-
-        # Aplica o p-valor (do teste filtrado) a todas as linhas
         prob_ks_col = f"Prob_KS_{log_col_name}"
         df[prob_ks_col] = p_value_filtered
 
@@ -267,14 +257,14 @@ def nota_valor_2(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
         #  Cálculo da Nota (_2)
         nota_col = f"nota_{col}_2"
         nota_cols_final.append(nota_col)
-        df[nota_col] = np.nan  # Inicializar com NaN
+        df[nota_col] = np.nan
+
+        cond_zero_or_neg = numeric_col_check.notna() & df[log_col_name].isna()
 
         p_val_check = df[prob_ks_col].fillna(0) >= 0.05
 
-        # Condições específicas para nota_valor_2
-        condA = p_val_check & (df[outlier_col] == 1)  # Outlier inferior
-        condB = p_val_check & (df[outlier_col] == 2)  # Outlier superior
-        # Se não for outlier (==0), aplicar banding
+        condA = p_val_check & (df[outlier_col] == 1)
+        condB = p_val_check & (df[outlier_col] == 2)
         condC = (
             p_val_check
             & (df[outlier_col] == 0)
@@ -298,8 +288,9 @@ def nota_valor_2(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
             & (df[log_col_name] >= df[mean_plus_sd_col])
         )
 
-        conditions = [condA, condB, condC, condD, condE, condF]
-        choices = [-1, 5, -1, 1, 3, 5]  # Notas correspondentes
+        conditions = [cond_zero_or_neg, condA, condB, condC, condD, condE, condF]
+        choices = [-1, -1, 5, -1, 1, 3, 5]
+
         df[nota_col] = np.select(conditions, choices, default=np.nan)
 
         # Limpeza de Colunas Intermediárias
@@ -1341,6 +1332,134 @@ def nota_final(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
     return df[cols_to_keep].copy()
 
 
+def calcular_notas_bloco(
+    df_variaveis_notas: pd.DataFrame, dicionario_bloco: dict
+) -> pd.DataFrame:
+    """
+    Calcula as notas finais para blocos temáticos.
+
+    Baseia-se na média das notas das variáveis individuais (`nota_var_X`)
+    pertencentes a cada bloco, conforme definido em `dicionario_bloco`.
+    A média é então categorizada em uma nota final (-1, 1, 3, 5) usando a
+    média e o desvio padrão da coluna de médias do bloco.
+
+    Args:
+        df_variaveis_notas (pd.DataFrame): DataFrame contendo pelo menos
+                                            as colunas 'id', 'municipio',
+                                            e as colunas 'nota_var_X'.
+        dicionario_bloco (dict): Dicionário mapeando nomes de variáveis base
+                                 ('var_X') para seus respectivos nomes de bloco
+                                 (e.g., {'var_1': 'Socioeconômica'}).
+
+    Returns:
+        pd.DataFrame: Uma cópia do DataFrame original com colunas adicionais
+                      representando a média calculada (`media_bloco_...`) e
+                      a nota final categorizada (`nota_bloco_...`) para cada
+                      bloco encontrado. Retorna o DataFrame original (cópia)
+                      se o dicionario_bloco for inválido ou vazio.
+    """
+    if not dicionario_bloco or not isinstance(dicionario_bloco, dict):
+        return df_variaveis_notas
+
+    df_result = df_variaveis_notas.copy()
+
+    bloco_para_notas_cols = {}
+    colunas_de_nota_existentes = [
+        c for c in df_result.columns if c.startswith("nota_var_")
+    ]
+    prefixo_chave = "nota_"
+
+    for col_nota in colunas_de_nota_existentes:
+        var_original_key = col_nota[len(prefixo_chave) :]
+        bloco = dicionario_bloco.get(var_original_key)
+        if bloco:
+            if bloco not in bloco_para_notas_cols:
+                bloco_para_notas_cols[bloco] = []
+            bloco_para_notas_cols[bloco].append(col_nota)
+
+    # Calcular a média e 3. Categorizar para cada bloco
+    blocos_processados = 0
+    for bloco, lista_cols_nota in bloco_para_notas_cols.items():
+        # --- Clean block name (unchanged) ---
+        bloco_clean_name = bloco.lower()
+        bloco_clean_name = re.sub(r"[áàâãä]", "a", bloco_clean_name)
+        bloco_clean_name = re.sub(r"[éèêë]", "e", bloco_clean_name)
+        bloco_clean_name = re.sub(r"[íìîï]", "i", bloco_clean_name)
+        bloco_clean_name = re.sub(r"[óòôõö]", "o", bloco_clean_name)
+        bloco_clean_name = re.sub(r"[úùûü]", "u", bloco_clean_name)
+        bloco_clean_name = re.sub(r"[ç]", "c", bloco_clean_name)
+        bloco_clean_name = re.sub(r"[\s-]+", "_", bloco_clean_name)
+        bloco_clean_name = re.sub(r"[^\w_]+", "", bloco_clean_name)
+        bloco_clean_name = re.sub(r"_+", "_", bloco_clean_name).strip("_")
+
+        media_col = f"media_bloco_{bloco_clean_name}"
+        nota_final_col = f"nota_bloco_{bloco_clean_name}"
+
+        cols_existentes_neste_bloco = [
+            c for c in lista_cols_nota if c in df_result.columns
+        ]
+
+        # Calcular a média das notas para o bloco
+        try:
+            df_result[media_col] = df_result[cols_existentes_neste_bloco].mean(
+                axis=1, skipna=True
+            )
+        except Exception:
+            if media_col in df_result.columns:
+                del df_result[media_col]
+            continue
+
+        # Calcular a nota final para o bloco com base na média e desvio padrão
+        try:
+            # Calcular a média e o desvio padrão das médias para este bloco
+            media_geral_bloco = df_result[media_col].mean()
+            sd_geral_bloco = df_result[media_col].std(ddof=1)
+
+            # Limite inferior e superior baseados na média e desvio padrão
+            # Tratar casos onde o desvio padrão pode ser NaN ou zero
+            if (
+                pd.isna(media_geral_bloco)
+                or pd.isna(sd_geral_bloco)
+                or sd_geral_bloco == 0
+            ):
+                print(
+                    f"Aviso: Média ou SD da coluna '{media_col}' é NaN. Notas para '{nota_final_col}' serão NaN."
+                )
+                df_result[nota_final_col] = np.nan
+            else:
+                limite_inf = media_geral_bloco - sd_geral_bloco
+                limite_sup = media_geral_bloco + sd_geral_bloco
+
+                # Define as condicoes com base nos limites
+                cond1 = df_result[media_col] < limite_inf
+                cond2 = (df_result[media_col] >= limite_inf) & (
+                    df_result[media_col] < media_geral_bloco
+                )
+                cond3 = (df_result[media_col] >= media_geral_bloco) & (
+                    df_result[media_col] < limite_sup
+                )
+                cond4 = df_result[media_col] >= limite_sup
+
+                conditions = [cond1, cond2, cond3, cond4]
+                choices = [-1, 1, 3, 5]
+
+                # Use default=np.nan para linhas onde media_col era originalmente NaN
+                df_result[nota_final_col] = np.select(
+                    conditions, choices, default=np.nan
+                )
+
+            blocos_processados += 1
+
+        except Exception:
+            # Limpeza de colunas criadas potencialmente se ocorrer erro no meio do cálculo
+            if nota_final_col in df_result.columns:
+                del df_result[nota_final_col]
+            # Manter media_col como foi calculada com sucesso antes deste bloco try
+            continue
+
+    return df_result
+
+
 def sort_key(col_name):
     match = re.match(r"([a-zA-Z_]+)(\d+)$", col_name)
     if match:
@@ -1357,69 +1476,84 @@ def ordenar_df_com_notas(
     id_col: str = "id",
 ) -> pd.DataFrame:
     """
-    Reordena as colunas de um DataFrame para o formato [id, base, nota_base, ...].
+    Reordena as colunas de um DataFrame para o formato
+    [id, outras_colunas_sem_bloco, base, nota_base, ..., colunas_com_bloco].
 
     Args:
         df (pd.DataFrame): DataFrame de entrada (geralmente combinado).
         colunas_base (List[str]): Lista dos nomes base das colunas (ex: 'var_1').
-        sort_key_func (Callable): Função usada para ordenar a lista colunas_base.
+        sort_key_func (Callable): Função usada para ordenar as listas de colunas.
         id_col (str, optional): Nome da coluna de identificação. Defaults to 'id'.
 
     Returns:
         pd.DataFrame: DataFrame com colunas reordenadas.
     """
-    todas_colunas_ordenadas = sorted(colunas_base, key=sort_key_func)
-    nova_ordem_colunas = []
     colunas_existentes_set = set(df.columns)
+    nova_ordem_colunas = []
 
-    # 1. Adiciona coluna ID se existir
+    # Adiciona coluna ID se existir
     if id_col in colunas_existentes_set:
         nova_ordem_colunas.append(id_col)
+        id_set = {id_col}
+    else:
+        id_set = set()
 
-    # 2. Identifica o conjunto de todas as colunas base e de nota *existentes*
-    #    Necessário para encontrar as restantes
+    # Identifica o conjunto de todas as colunas base e de nota *existentes*
     base_e_nota_existentes_set: Set[str] = set()
-    for (
-        base_col
-    ) in colunas_base:  # Usa a lista original para identificar todos os possíveis pares
+    for base_col in colunas_base:
         nota_col = f"nota_{base_col}"
         if base_col in colunas_existentes_set:
             base_e_nota_existentes_set.add(base_col)
         if nota_col in colunas_existentes_set:
             base_e_nota_existentes_set.add(nota_col)
 
-    # 3. Identifica, ordena e adiciona as colunas restantes *logo após o ID*
-    id_set: Set[str] = {id_col} if id_col in colunas_existentes_set else set()
-    colunas_restantes = sorted(
-        [
-            col
-            for col in colunas_existentes_set
-            if col not in id_set and col not in base_e_nota_existentes_set
-        ],
-        key=sort_key_func,  # Ordena as restantes também
+    colunas_restantes_total = (
+        colunas_existentes_set - id_set - base_e_nota_existentes_set
     )
-    nova_ordem_colunas.extend(colunas_restantes)
 
-    # 4. Adiciona os pares de coluna base e sua nota (usando a lista ordenada)
-    for base_col in todas_colunas_ordenadas:
+    # 4. Divide essas colunas restantes em aquelas com "bloco" e aquelas sem
+    colunas_restantes_sem_bloco = []
+    colunas_bloco = []
+    for col in colunas_restantes_total:
+        if "bloco" in col.lower():
+            colunas_bloco.append(col)
+        else:
+            colunas_restantes_sem_bloco.append(col)
+
+    # 5. Ordena as colunas restantes sem bloco e as adiciona após o ID
+    colunas_restantes_sem_bloco_sorted = sorted(
+        colunas_restantes_sem_bloco, key=sort_key_func
+    )
+    nova_ordem_colunas.extend(colunas_restantes_sem_bloco_sorted)
+
+    # 6. Ordena as colunas base e adiciona os pares base/nota
+    todas_colunas_base_ordenadas = sorted(colunas_base, key=sort_key_func)
+    for base_col in todas_colunas_base_ordenadas:
         nota_col = f"nota_{base_col}"
 
-        # Adiciona coluna base se existir
-        if base_col in colunas_existentes_set:
-            # Evita adicionar duplicatas se já estava nas restantes (improvável, mas seguro)
-            if base_col not in nova_ordem_colunas:
-                nova_ordem_colunas.append(base_col)
+        if (
+            base_col in base_e_nota_existentes_set
+            and base_col not in nova_ordem_colunas
+        ):
+            nova_ordem_colunas.append(base_col)
 
-        # Adiciona coluna de nota se existir
-        if nota_col in colunas_existentes_set:
-            if nota_col not in nova_ordem_colunas:
-                nova_ordem_colunas.append(nota_col)
+        # Adiciona a coluna nota se existir e não tiver sido adicionada
+        if (
+            nota_col in base_e_nota_existentes_set
+            and nota_col not in nova_ordem_colunas
+        ):
+            nova_ordem_colunas.append(nota_col)
 
-    # 5. Retorna o DataFrame com a nova ordem de colunas
-    cols_existentes_na_ordem = [
+    # 7. Ordena as colunas bloco e as adiciona ao final
+    colunas_bloco_sorted = sorted(colunas_bloco, key=sort_key_func)
+    nova_ordem_colunas.extend(colunas_bloco_sorted)
+
+    # 8. Verificação final para garantir que todas as colunas existem e retorna o DataFrame reordenado
+    cols_existentes_na_ordem_final = [
         col for col in nova_ordem_colunas if col in colunas_existentes_set
     ]
-    return df[cols_existentes_na_ordem]
+
+    return df[cols_existentes_na_ordem_final]
 
 
 def renomear_colunas_mapeadas(
