@@ -7,7 +7,7 @@ import importlib
 importlib.reload(utils)
 
 print("Iniciando ranqueamento")
-arquivo = "anfacer"
+arquivo = "municipios"
 
 base = pd.read_excel(
     f"bases/base_{arquivo}.xlsx",

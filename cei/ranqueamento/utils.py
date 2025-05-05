@@ -341,81 +341,80 @@ def nota_valor_3(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
     nota_cols_final = []
 
     for col in colunas:
-        # Calcular Log Natural
         log_col_name = f"{col}_ln"
+        outlier_col = f"outlier_{col}"
+        nota_col = f"nota_{col}_3"
+        nota_cols_final.append(nota_col)
 
-        # Lidar com coluna original toda NaN ou com valores não positivos
-        if df[col].isnull().all() or (df[col] <= 0).any():
-            if log_col_name not in df.columns:
-                df[log_col_name] = np.nan
-            # Criar colunas dependentes como NaN
-            outlier_col = f"outlier_{col}"
-            nota_col = f"nota_{col}_3"
-            for c_name in [outlier_col, nota_col]:
-                if c_name not in df.columns:
-                    df[c_name] = np.nan
-            nota_cols_final.append(nota_col)
-            if log_col_name in df.columns and df[log_col_name].isnull().all():
-                del df[log_col_name]
-            continue
+        # Tentar converter para numérico, tratando erros
+        numeric_col_check = pd.to_numeric(df[col], errors="coerce")
 
+        # Calcular log, tratando 0 e negativos como NaN
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            df[log_col_name] = np.log(df[col].where(df[col] > 0))
+            # Usar numeric_col_check que já tratou não-números como NaN
+            df[log_col_name] = np.log(numeric_col_check.where(numeric_col_check > 0))
         df[log_col_name] = df[log_col_name].replace([np.inf, -np.inf], np.nan)
 
-        # Calcular Outliers (Threshold +/- 3 SD)
+        # Calcular Outliers (Threshold +/- 3 SD) - SOMENTE se houver dados no log
         col_mean = df[log_col_name].mean()
         col_sd = df[log_col_name].std(ddof=1)
 
         temp_z_score_col = pd.Series(np.nan, index=df.index)
-        if pd.notna(col_sd) and col_sd != 0:
+        # Calcular Z-score apenas se sd for válido e não zero
+        if pd.notna(col_sd) and col_sd != 0 and pd.notna(col_mean):
             temp_z_score_col = (df[log_col_name] - col_mean) / col_sd
 
-        outlier_col = f"outlier_{col}"
+        # Inicializar coluna outlier com NaN
         df[outlier_col] = np.nan
+        # Marcar como 0 (não outlier) apenas onde o log NÃO é NaN
         df.loc[df[log_col_name].notna(), outlier_col] = 0
+        # Marcar outliers onde Z-score foi calculado e excede o threshold
         df.loc[temp_z_score_col < -3, outlier_col] = 1  # Threshold -3
         df.loc[temp_z_score_col > 3, outlier_col] = 2  # Threshold +3
 
         # Filtrar e Calcular Quartis
+        # Considerar apenas não-outliers (0) e onde log não é NaN
         quartile_filter_mask = (df[outlier_col] == 0) & df[log_col_name].notna()
         data_for_quartiles = df.loc[quartile_filter_mask, log_col_name]
 
         k25, k50, k75 = np.nan, np.nan, np.nan  # Valores padrão
-        if not data_for_quartiles.empty:
-            quantiles = data_for_quartiles.quantile([0.25, 0.50, 0.75])
-            if 0.25 in quantiles.index:
-                k25 = quantiles.loc[0.25]
-            if 0.50 in quantiles.index:
-                k50 = quantiles.loc[0.50]
-            if 0.75 in quantiles.index:
-                k75 = quantiles.loc[0.75]
+        if (
+            not data_for_quartiles.empty and len(data_for_quartiles.dropna()) >= 4
+        ):  # Precisa de pontos suficientes para quartis
+            try:
+                quantiles = data_for_quartiles.quantile([0.25, 0.50, 0.75])
+
+                k25 = quantiles.get(0.25, np.nan)
+                k50 = quantiles.get(0.50, np.nan)
+                k75 = quantiles.get(0.75, np.nan)
+            except Exception:
+                k25, k50, k75 = np.nan, np.nan, np.nan
 
         # Cálculo da Nota (_3)
-        nota_col = f"nota_{col}_3"
-        nota_cols_final.append(nota_col)
-        df[nota_col] = np.nan
+        df[nota_col] = np.nan  # Inicializa a coluna de nota
 
         # Condição especial: Original não nulo, mas _ln é nulo
-        cond_missing = df[col].notna() & df[log_col_name].isna()
+        cond_missing = numeric_col_check.notna() & df[log_col_name].isna()
 
-        # Condições baseadas nos quartis (só aplicáveis se quartis foram calculados)
-        cond1 = pd.notna(k25) & (df[log_col_name] <= k25)
+        # Condições baseadas nos quartis (só aplicáveis se quartis foram calculados e log não é NaN)
+        # Checar se os quartis não são NaN antes de usar na condição
+        cond1 = pd.notna(k25) & df[log_col_name].notna() & (df[log_col_name] <= k25)
         cond2 = (
             pd.notna(k25)
             & pd.notna(k50)
+            & df[log_col_name].notna()
             & (df[log_col_name] > k25)
             & (df[log_col_name] <= k50)
         )
         cond3 = (
             pd.notna(k50)
             & pd.notna(k75)
+            & df[log_col_name].notna()
             & (df[log_col_name] > k50)
             & (df[log_col_name] <= k75)
         )
-        cond4 = pd.notna(k75) & (df[log_col_name] > k75)
-
+        cond4 = pd.notna(k75) & df[log_col_name].notna() & (df[log_col_name] > k75)
         conditions = [cond_missing, cond1, cond2, cond3, cond4]
         choices = [-1, -1, 1, 3, 5]
         df[nota_col] = np.select(conditions, choices, default=np.nan)
@@ -433,9 +432,11 @@ def nota_valor_3(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
     cols_to_keep_final = []
     if "id" in df.columns:
         cols_to_keep_final.append("id")
+    # Garantir que apenas colunas de nota realmente criadas sejam mantidas
     cols_to_keep_final.extend([nc for nc in nota_cols_final if nc in df.columns])
+    existing_cols_to_keep = [col for col in cols_to_keep_final if col in df.columns]
 
-    return df[cols_to_keep_final].copy()
+    return df[existing_cols_to_keep].copy()
 
 
 def nota_taxa_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
@@ -854,53 +855,32 @@ def nota_taxa_3(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
 
 def nota_participacao_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
     """
-    Calcula notas (_1) para colunas de participação, baseadas na distribuição
-    normal da coluna original (tratando 0s como missing para stats).
-
-    Assume que a coluna 'id' existe no DataFrame de entrada.
-    Realiza todos os cálculos intermediários necessários.
+    Calcula notas (_1) para colunas de participação,
+    - KS, Média, SD calculados ignorando zeros.
+    - TODAS as notas (0, 100, bandas) são atribuídas SOMENTE se p-valor KS >= 0.05.
+    - Nota 0 -> -1
+    - Nota 100 -> 5
+    - Notas Bandas: -1, 1, 3, 5
+    - Usa np.select para atribuição de notas.
 
     Args:
-        df (pd.DataFrame): O DataFrame contendo os dados originais e a coluna 'id'.
-        colunas (list[str]): Uma lista de nomes das colunas de *participação*
-                             originais a serem processadas.
+        df (pd.DataFrame): DataFrame com dados originais e 'id'.
+        colunas (list[str]): Nomes das colunas de participação.
 
     Returns:
-        pd.DataFrame: Um DataFrame contendo a coluna 'id' e as colunas
-                      de nota calculadas ('nota_col_1'). Notas não atribuídas
-                      pelas condições permanecerão como NaN.
+        pd.DataFrame: DataFrame com 'id' e 'nota_col_1' calculadas.
     """
-    df = df.copy()
-    nota_cols_final = []
+    df_result = df[["id"]].copy()
 
     for col in colunas:
-        # Criar uma série temporária para cálculos onde 0 é NaN
-        col_data_for_stats = df[col].replace(0, np.nan)
-
-        # Nome da coluna de nota
         nota_col = f"nota_{col}_1"
-        nota_cols_final.append(nota_col)
 
-        if col_data_for_stats.isnull().all():
-            # Criar colunas dependentes como NaN
-            prob_ks_col = f"Prob_KS_{col}"  # Sem _ln
-            mean_col = f"{col}_mean"
-            sd_col = f"{col}_sd"
-            mean_minus_sd_col = f"{col}_mean_menos_sd"
-            mean_plus_sd_col = f"{col}_mean_mais_sd"
-            for c_name in [
-                prob_ks_col,
-                mean_col,
-                sd_col,
-                mean_minus_sd_col,
-                mean_plus_sd_col,
-                nota_col,
-            ]:
-                if c_name not in df.columns:
-                    df[c_name] = np.nan
-            continue
-        # Teste de Normalidade (Lilliefors)
-        prob_ks_col = f"Prob_KS_{col}"
+        numeric_col_check = pd.to_numeric(df[col], errors="coerce")
+        col_data_for_stats = numeric_col_check.replace(
+            0, np.nan
+        )  # Zeros como NaN para stats
+
+        # --- Cálculos Stats (sem zeros) ---
         data_for_ks = col_data_for_stats.dropna()
         p_value = np.nan
         if len(data_for_ks) >= 5:
@@ -908,366 +888,299 @@ def nota_participacao_1(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
                 ks_stat, p_value = lilliefors(data_for_ks, dist="norm")
             except Exception:
                 p_value = np.nan
-        # Adicionar p-valor como coluna constante
-        df[prob_ks_col] = p_value
+        prob_ks_check = (p_value >= 0.05) if pd.notna(p_value) else False
 
-        # Média e Desvio Padrão ---
-        mean_col = f"{col}_mean"
-        sd_col = f"{col}_sd"
         col_mean = col_data_for_stats.mean()
         col_sd = col_data_for_stats.std(ddof=1)
 
-        df[mean_col] = col_mean
-        df[sd_col] = col_sd
+        # Calcular limites apenas se mean e sd forem válidos
+        mean_minus_sd = np.nan
+        mean_plus_sd = np.nan
+        is_sd_zero = pd.notna(col_sd) and col_sd == 0
+        is_sd_positive = pd.notna(col_sd) and col_sd > 0
 
-        # Limites Mean +/- SD
-        mean_minus_sd_col = f"{col}_mean_menos_sd"
-        mean_plus_sd_col = f"{col}_mean_mais_sd"
-        if pd.notna(col_mean) and pd.notna(col_sd):
-            df[mean_minus_sd_col] = col_mean - col_sd
-            df[mean_plus_sd_col] = col_mean + col_sd
-        else:
-            df[mean_minus_sd_col] = np.nan
-            df[mean_plus_sd_col] = np.nan
+        if is_sd_positive and pd.notna(col_mean):
+            mean_minus_sd = col_mean - col_sd
+            mean_plus_sd = col_mean + col_sd
+        elif is_sd_zero and pd.notna(col_mean):  # Caso sd=0
+            mean_minus_sd = col_mean
+            mean_plus_sd = col_mean
 
-        #  Cálculo da Nota (_1) ---
-        df[nota_col] = np.nan
+        # --- Definição das Condições para np.select ---
+        # Aplicadas à coluna numérica original
+        # Só avaliar se os limites são válidos
+        if pd.notna(mean_minus_sd):
+            # Condições Base (sem incluir o check de p-valor ainda)
+            base_cond_eq_0 = numeric_col_check == 0
+            base_cond_eq_100 = numeric_col_check == 100
+            base_cond_sd_zero_at_mean = is_sd_zero & (numeric_col_check == col_mean)
+            # Condições de banda válidas apenas se sd > 0
+            base_cond_lt_msd = is_sd_positive & (numeric_col_check < mean_minus_sd)
+            base_cond_bt_msd_m = (
+                is_sd_positive
+                & (numeric_col_check >= mean_minus_sd)
+                & (numeric_col_check < col_mean)
+            )
+            base_cond_bt_m_psd = (
+                is_sd_positive
+                & (numeric_col_check >= col_mean)
+                & (numeric_col_check < mean_plus_sd)
+            )
+            base_cond_gt_psd = is_sd_positive & (numeric_col_check >= mean_plus_sd)
 
-        # Condição principal do p-valor
-        p_val_check = df[prob_ks_col].fillna(0) >= 0.05
+            # Combinar com prob_ks_check e ordenar por prioridade SPSS (0, 100, sd=0, bandas)
+            conditions = [
+                prob_ks_check & base_cond_eq_0,  # Nota -1
+                prob_ks_check & base_cond_eq_100,  # Nota 5
+                prob_ks_check
+                & base_cond_sd_zero_at_mean,  # Nota 1 (assumido para sd=0)
+                prob_ks_check & base_cond_lt_msd,  # Nota -1
+                prob_ks_check & base_cond_bt_msd_m,  # Nota 1
+                prob_ks_check & base_cond_bt_m_psd,  # Nota 3
+                prob_ks_check & base_cond_gt_psd,  # Nota 5
+            ]
+            choices = [-1, 5, 1, -1, 1, 3, 5]  # Notas correspondentes
+            default_value = np.nan  # Se nenhuma condição for True (inclui p<0.05)
 
-        # Condições baseadas nos limites e casos especiais (0 e 100)
-        # Aplicadas à coluna original df[col]
-        cond_eq_0 = p_val_check & (df[col] == 0)
-        cond_eq_100 = p_val_check & (df[col] == 100)
-        cond_lt_msd = p_val_check & (df[col] < df[mean_minus_sd_col])
-        cond_bt_msd_m = (
-            p_val_check & (df[col] >= df[mean_minus_sd_col]) & (df[col] < df[mean_col])
-        )
-        cond_bt_m_psd = (
-            p_val_check & (df[col] >= df[mean_col]) & (df[col] < df[mean_plus_sd_col])
-        )
-        cond_gt_psd = p_val_check & (df[col] >= df[mean_plus_sd_col])
+            # Calcular e atribuir a nota ao DataFrame resultado
+            df_result[nota_col] = np.select(conditions, choices, default=default_value)
 
-        # Ordem: Casos especiais (0, 100) primeiro, depois as bandas
-        conditions = [
-            cond_eq_0,  # Valor 0 -> Nota 5
-            cond_eq_100,  # Valor 100 -> Nota -1
-            cond_lt_msd,  # Abaixo de mean-sd -> Nota 5 (Invertido!)
-            cond_bt_msd_m,  # Entre mean-sd e mean -> Nota 3 (Invertido!)
-            cond_bt_m_psd,  # Entre mean e mean+sd -> Nota 1 (Invertido!)
-            cond_gt_psd,  # Acima de mean+sd -> Nota -1 (Invertido!)
-        ]
-        choices = [
-            5,  # Nota para 0
-            -1,  # Nota para 100
-            -1,  # Nota para < mean-sd
-            1,  # Nota para >= mean-sd & < mean
-            3,  # Nota para >= mean & < mean+sd
-            5,  # Nota para >= mean+sd
-        ]
-        df[nota_col] = np.select(conditions, choices, default=np.nan)
+        else:  # Caso onde mean ou sd não puderam ser calculados
+            df_result[nota_col] = np.nan
 
-        # Limpeza de Colunas Intermediárias
-        cols_to_delete = [
-            prob_ks_col,
-            mean_col,
-            sd_col,
-            mean_minus_sd_col,
-            mean_plus_sd_col,
-        ]
-        for c_del in cols_to_delete:
-            if c_del in df.columns:
-                try:
-                    del df[c_del]
-                except KeyError:
-                    pass
-    cols_to_keep_final = []
-    if "id" in df.columns:
-        cols_to_keep_final.append("id")
-    cols_to_keep_final.extend([nc for nc in nota_cols_final if nc in df.columns])
-
-    return df[cols_to_keep_final].copy()
+    return df_result
 
 
 def nota_participacao_2(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
     """
-    Calcula notas (_2) para colunas de participação, considerando outliers
-    (+/- 3 SD) e teste K-S em dados filtrados (sem 0s e sem outliers).
-
-    Assume que a coluna 'id' existe no DataFrame de entrada.
-    Realiza todos os cálculos intermediários necessários.
+    Calcula notas (_2) para colunas de participação
+    - Média, SD, Z-score calculados INCLUINDO zeros.
+    - KS Test feito em dados não-missing e não-outliers (Z entre -3 e 3).
+    - TODAS as notas (0, 100, outliers, bandas) são atribuídas SOMENTE se p-valor KS >= 0.05.
+    - Nota 0 -> -1
+    - Nota 100 -> 5
+    - Nota Outlier Z<-3 -> -1
+    - Nota Outlier Z>3 -> 5
+    - Notas Bandas: -1, 1, 3, 5
+    - Usa np.select para atribuição de notas.
 
     Args:
-        df (pd.DataFrame): O DataFrame contendo os dados originais e a coluna 'id'.
-        colunas (list[str]): Uma lista de nomes das colunas de *participação*
-                             originais a serem processadas.
+        df (pd.DataFrame): DataFrame com dados originais e 'id'.
+        colunas (list[str]): Nomes das colunas de participação.
 
     Returns:
-        pd.DataFrame: Um DataFrame contendo a coluna 'id' e as colunas
-                      de nota calculadas ('nota_col_2'). Notas não atribuídas
-                      pelas condições permanecerão como NaN.
+        pd.DataFrame: DataFrame com 'id' e 'nota_col_2' calculadas.
+    """
+    df_result = df[["id"]].copy()
+
+    for col in colunas:
+        nota_col = f"nota_{col}_2"
+
+        numeric_col_check = pd.to_numeric(df[col], errors="coerce")
+        col_data_for_stats = numeric_col_check
+
+        # Pular se coluna numérica for toda NaN
+        if col_data_for_stats.isnull().all():
+            df_result[nota_col] = np.nan
+            continue
+
+        # --- Cálculos Stats (COM zeros) ---
+        col_mean = col_data_for_stats.mean()
+        col_sd = col_data_for_stats.std(ddof=1)
+
+        # Calcular Z-Score (COM zeros)
+        temp_z_score_col = pd.Series(np.nan, index=df.index)
+        # Z-score é NaN se sd=NaN, sd=0, mean=NaN ou valor=NaN
+        if pd.notna(col_sd) and col_sd != 0 and pd.notna(col_mean):
+            mask_notna = col_data_for_stats.notna()
+            temp_z_score_col.loc[mask_notna] = (
+                col_data_for_stats[mask_notna] - col_mean
+            ) / col_sd
+
+        # --- KS Test (em dados não-missing, não-outliers) ---
+        # Filtro SPSS: not missing(...) and (Z > -3 and Z < 3)
+        # Equivalente a Z-score não ser NaN e estar entre -3 e 3
+        ks_filter_mask = temp_z_score_col.between(
+            -3, 3, inclusive="neither"
+        )  # 'neither' = exclusivo
+        # Teste KS feito nos dados originais (com zeros) filtrados
+        data_for_ks_filtered = col_data_for_stats[ks_filter_mask]
+
+        p_value_filtered = np.nan
+        if len(data_for_ks_filtered.dropna()) >= 5:
+            try:
+                ks_stat, p_value_filtered = lilliefors(
+                    data_for_ks_filtered.dropna(), dist="norm"
+                )
+            except Exception:
+                p_value_filtered = np.nan
+        prob_ks_check = (
+            (p_value_filtered >= 0.05) if pd.notna(p_value_filtered) else False
+        )
+
+        # --- Calcular Limites (usando Mean/SD com zeros) ---
+        mean_minus_sd = np.nan
+        mean_plus_sd = np.nan
+        # Calcular limites apenas se Média e SD são válidos
+        if pd.notna(col_mean) and pd.notna(col_sd):
+            # Se sd=0, os limites serão iguais à média
+            mean_minus_sd = col_mean - col_sd
+            mean_plus_sd = col_mean + col_sd
+
+        # --- Definição das Condições Base para np.select ---
+        # Aplicadas à coluna numérica original e ao Z-score calculado
+        base_cond_eq_0 = numeric_col_check == 0
+        base_cond_eq_100 = numeric_col_check == 100
+        # Definir condições de outlier diretamente do Z-score
+        # Precisamos checar se Z não é NaN antes da comparação
+        base_cond_outlier_1 = temp_z_score_col.notna() & (temp_z_score_col < -3)
+        base_cond_outlier_2 = temp_z_score_col.notna() & (temp_z_score_col > 3)
+        # Condição para ser um não-outlier válido (Z existe e está entre -3 e 3)
+        is_valid_non_outlier_z = ks_filter_mask
+
+        # Condições de banda (aplicadas apenas se for não-outlier válido E limites válidos)
+        base_cond_band_1 = pd.Series(False, index=df.index)
+        base_cond_band_2 = pd.Series(False, index=df.index)
+        base_cond_band_3 = pd.Series(False, index=df.index)
+        base_cond_band_4 = pd.Series(False, index=df.index)
+
+        if pd.notna(mean_minus_sd):
+            base_cond_band_1 = is_valid_non_outlier_z & (
+                numeric_col_check < mean_minus_sd
+            )
+            base_cond_band_2 = (
+                is_valid_non_outlier_z
+                & (numeric_col_check >= mean_minus_sd)
+                & (numeric_col_check < col_mean)
+            )
+            base_cond_band_3 = (
+                is_valid_non_outlier_z
+                & (numeric_col_check >= col_mean)
+                & (numeric_col_check < mean_plus_sd)
+            )
+            base_cond_band_4 = is_valid_non_outlier_z & (
+                numeric_col_check >= mean_plus_sd
+            )
+
+        # --- Atribuição da Nota via np.select (replicando IFs e prioridade SPSS) ---
+        conditions = [
+            prob_ks_check & base_cond_eq_0,  # P1: 0 (-1)
+            prob_ks_check & base_cond_eq_100,  # P2: 100 (5)
+            prob_ks_check & base_cond_outlier_1,  # P3: Outlier Low (-1)
+            prob_ks_check & base_cond_outlier_2,  # P4: Outlier High (5)
+            prob_ks_check & base_cond_band_1,  # P5: Band 1 (-1)
+            prob_ks_check & base_cond_band_2,  # P6: Band 2 (1)
+            prob_ks_check & base_cond_band_3,  # P7: Band 3 (3)
+            prob_ks_check & base_cond_band_4,  # P8: Band 4 (5)
+        ]
+        choices = [-1, 5, -1, 5, -1, 1, 3, 5]  # Notas correspondentes
+        default_value = (
+            np.nan
+        )  # Se nenhuma condição for True (inclui p<0.05, NaNs originais)
+
+        # Calcular e atribuir a nota ao DataFrame resultado
+        df_result[nota_col] = np.select(conditions, choices, default=default_value)
+
+    return df_result
+
+
+def nota_participacao_3(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
+    """
+    Calcula notas (_3) para colunas de participação,
+    - Usa outlier flag calculado como em nota_2 (Z-score INCLUINDO zeros).
+    - Calcula quartis sobre dados não-outliers (pode incluir zeros se não forem outliers).
+    - Atribui notas (-1, 1, 3, 5) baseado SOMENTE nas bandas de quartis.
+    - Outliers não recebem nota (NaN). 0 e 100 recebem nota baseada na banda em que caem.
+    - NENHUMA dependência de teste KS.
+
+    Args:
+        df (pd.DataFrame): DataFrame com dados originais e 'id'.
+        colunas (list[str]): Nomes das colunas de participação.
+
+    Returns:
+        pd.DataFrame: DataFrame com 'id' e 'nota_col_3' calculadas.
+
     """
     df = df.copy()
     nota_cols_final = []
 
     for col in colunas:
-        # Preparar dados para Stats (0 = NaN)
-        col_data_for_stats = df[col].replace(0, np.nan)
-
-        # Nome da coluna de nota
-        nota_col = f"nota_{col}_2"
-        nota_cols_final.append(nota_col)
-
-        # Lidar com coluna original (sem 0s) toda NaN
-        if col_data_for_stats.isnull().all():
-            # Criar colunas dependentes como NaN
-            outlier_col = f"outlier_{col}"
-            prob_ks_col = f"Prob_KS_{col}"
-            mean_col = f"{col}_mean"
-            sd_col = f"{col}_sd"
-            mean_minus_sd_col = f"{col}_mean_menos_sd"
-            mean_plus_sd_col = f"{col}_mean_mais_sd"
-            for c_name in [
-                outlier_col,
-                prob_ks_col,
-                mean_col,
-                sd_col,
-                mean_minus_sd_col,
-                mean_plus_sd_col,
-                nota_col,
-            ]:
-                if c_name not in df.columns:
-                    df[c_name] = np.nan
-            continue
-
-        # Média e Desvio Padrão Gerais
-        mean_col = f"{col}_mean"
-        sd_col = f"{col}_sd"
-        col_mean = col_data_for_stats.mean()
-        col_sd = col_data_for_stats.std(ddof=1)
-
-        df[mean_col] = col_mean
-        df[sd_col] = col_sd
-
-        # Cálculo do Z-Score
-        # Calculado sobre os dados com 0s como NaN
-        temp_z_score_col = pd.Series(np.nan, index=df.index)
-        if pd.notna(col_sd) and col_sd != 0:
-            temp_z_score_col = (col_data_for_stats - col_mean) / col_sd
-
-        # Identificação de Outliers (Threshold +/- 3)
-        outlier_col = f"outlier_{col}"
-        df[outlier_col] = np.nan
-        df.loc[df[col].notna(), outlier_col] = 0
-        df.loc[temp_z_score_col < -3, outlier_col] = 1
-        df.loc[temp_z_score_col > 3, outlier_col] = 2
-
-        # Filtragem TEMPORÁRIA para K-S
-        # Filtro: não missing na original E Z-score entre -3 e 3
-        ks_filter_mask = (
-            col_data_for_stats.notna()
-            & (temp_z_score_col > -3)
-            & (temp_z_score_col < 3)
-        )
-        data_for_ks_filtered = col_data_for_stats[ks_filter_mask]  # Usa dados com 0=NaN
-
-        # Realizar Teste K-S (Lilliefors) nos dados filtrados
-        p_value_filtered = np.nan
-        if len(data_for_ks_filtered) >= 5:
-            try:
-                ks_stat, p_value_filtered = lilliefors(
-                    data_for_ks_filtered, dist="norm"
-                )
-            except Exception:
-                p_value_filtered = np.nan
-
-        # Aplica o p-valor (do teste filtrado) a TODAS as linhas
-        prob_ks_col = f"Prob_KS_{col}"
-        df[prob_ks_col] = p_value_filtered
-
-        # -Calcular Limites (usando média/dp gerais, com 0=NaN)
-        mean_minus_sd_col = f"{col}_mean_menos_sd"
-        mean_plus_sd_col = f"{col}_mean_mais_sd"
-        if pd.notna(col_mean) and pd.notna(col_sd):
-            df[mean_minus_sd_col] = col_mean - col_sd
-            df[mean_plus_sd_col] = col_mean + col_sd
-        else:
-            df[mean_minus_sd_col] = np.nan
-            df[mean_plus_sd_col] = np.nan
-
-        # Cálculo da Nota (_2) ---
-        # Comparações usam a coluna original (0 é 0)
-        df[nota_col] = np.nan
-
-        p_val_check = df[prob_ks_col].fillna(0) >= 0.05
-
-        # Condições específicas para nota_participacao_2
-        cond_eq_0 = p_val_check & (df[col] == 0)
-        cond_eq_100 = p_val_check & (df[col] == 100)
-        cond_outlier_1 = p_val_check & (df[outlier_col] == 1)  # Outlier inferior Z<-3
-        cond_outlier_2 = p_val_check & (df[outlier_col] == 2)  # Outlier superior Z>3
-        # Se não for outlier (==0), aplicar banding
-        cond_band_1 = (
-            p_val_check & (df[outlier_col] == 0) & (df[col] < df[mean_minus_sd_col])
-        )
-        cond_band_2 = (
-            p_val_check
-            & (df[outlier_col] == 0)
-            & (df[col] >= df[mean_minus_sd_col])
-            & (df[col] < df[mean_col])
-        )
-        cond_band_3 = (
-            p_val_check
-            & (df[outlier_col] == 0)
-            & (df[col] >= df[mean_col])
-            & (df[col] < df[mean_plus_sd_col])
-        )
-        cond_band_4 = (
-            p_val_check & (df[outlier_col] == 0) & (df[col] >= df[mean_plus_sd_col])
-        )
-
-        # Ordem: Casos Especiais (0, 100), Outliers (1, 2), Banding (para 0)
-        conditions = [
-            cond_eq_0,  # Nota 5 se 0
-            cond_eq_100,  # Nota -1 se 100
-            cond_outlier_1,  # Nota 5 se outlier Z<-3
-            cond_outlier_2,  # Nota -1 se outlier Z>3
-            cond_band_1,  # Nota 5 se não outlier e < mean-sd
-            cond_band_2,  # Nota 3 se não outlier e >= mean-sd & < mean
-            cond_band_3,  # Nota 1 se não outlier e >= mean & < mean+sd
-            cond_band_4,  # Nota -1 se não outlier e >= mean+sd
-        ]
-        choices = [
-            5,  # Nota para 0
-            -1,  # Nota para 100
-            5,  # Nota para outlier Z<-3
-            -1,  # Nota para outlier Z>3
-            5,  # Nota para banda 1
-            3,  # Nota para banda 2
-            1,  # Nota para banda 3
-            -1,  # Nota para banda 4
-        ]
-        df[nota_col] = np.select(conditions, choices, default=np.nan)
-
-        # Limpeza de Colunas Intermediárias
-        cols_to_delete = [
-            mean_col,
-            sd_col,
-            outlier_col,
-            prob_ks_col,
-            mean_minus_sd_col,
-            mean_plus_sd_col,
-        ]
-        for c_del in cols_to_delete:
-            if c_del in df.columns:
-                try:
-                    del df[c_del]
-                except KeyError:
-                    pass
-
-    cols_to_keep_final = []
-    if "id" in df.columns:
-        cols_to_keep_final.append("id")
-    cols_to_keep_final.extend([nc for nc in nota_cols_final if nc in df.columns])
-
-    return df[cols_to_keep_final].copy()
-
-
-def nota_participacao_3(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
-    """
-    Calcula notas (_3) para colunas de participação, baseadas nos quartis
-    da coluna original, calculados após filtrar outliers (+/- 3 SD).
-
-    Assume que a coluna 'id' existe no DataFrame de entrada.
-    Realiza todos os cálculos intermediários necessários.
-
-    Args:
-        df (pd.DataFrame): O DataFrame contendo os dados originais e a coluna 'id'.
-        colunas (list[str]): Lista dos nomes das colunas de participação originais.
-
-    Returns:
-        pd.DataFrame: Um DataFrame contendo a coluna 'id' e as colunas
-                      de nota calculadas ('nota_col_3'). Notas não atribuídas
-                      pelas condições permanecerão como NaN.
-    """
-    df = df.copy()  # Trabalhar em uma cópia
-    nota_cols_final = []
-
-    # Escala de notas padrão (direta)
-    choices = [-1, 1, 3, 5]
-
-    for col in colunas:
-        # Preparar dados para Stats (0 = NaN) ---
-        col_data_for_stats = df[col].replace(0, np.nan)
-
-        # Nome da coluna de nota
         nota_col = f"nota_{col}_3"
         nota_cols_final.append(nota_col)
 
-        # Lidar com coluna original (sem 0s) toda NaN
-        if col_data_for_stats.isnull().all():
-            outlier_col = f"outlier_{col}"
-            for c_name in [outlier_col, nota_col]:
-                if c_name not in df.columns:
-                    df[c_name] = np.nan
-            continue
-
-        # Calcular Outliers (Threshold +/- 3 SD) ---
-        col_mean = col_data_for_stats.mean()
-        col_sd = col_data_for_stats.std(ddof=1)
-
-        temp_z_score_col = pd.Series(np.nan, index=df.index)
-        if pd.notna(col_sd) and col_sd != 0:
-            temp_z_score_col = (col_data_for_stats - col_mean) / col_sd
+        numeric_col_check = pd.to_numeric(df[col], errors="coerce")
+        col_data_for_stats = numeric_col_check
 
         outlier_col = f"outlier_{col}"
+        df[nota_col] = np.nan
         df[outlier_col] = np.nan
-        df.loc[df[col].notna(), outlier_col] = 0
+
+        # Pular se coluna numérica for toda NaN
+        if col_data_for_stats.isnull().all():
+            continue
+
+        # Recalcular Outliers
+        col_mean = col_data_for_stats.mean()
+        col_sd = col_data_for_stats.std(ddof=1)
+        temp_z_score_col = pd.Series(np.nan, index=df.index)
+        if pd.notna(col_sd) and col_sd != 0 and pd.notna(col_mean):
+            mask_notna = col_data_for_stats.notna()
+            temp_z_score_col.loc[mask_notna] = (
+                col_data_for_stats[mask_notna] - col_mean
+            ) / col_sd
+        df.loc[temp_z_score_col.notna(), outlier_col] = 0
         df.loc[temp_z_score_col < -3, outlier_col] = 1
         df.loc[temp_z_score_col > 3, outlier_col] = 2
+        # Valores onde Z não pôde ser calculado (NaN original) terão outlier_col = NaN
 
-        # Filtrar e Calcular Quartis ---
-        quartile_filter_mask = (df[outlier_col] == 0) & df[col].notna()
-        data_for_quartiles = df.loc[quartile_filter_mask, col]
+        # Calcular Quartis (sobre não-outliers, pode incluir zeros)
+        quartile_filter_mask = (df[outlier_col] == 0) & numeric_col_check.notna()
+        data_for_quartiles = numeric_col_check[quartile_filter_mask]
 
         k25, k50, k75 = np.nan, np.nan, np.nan
-        if not data_for_quartiles.empty:
-            quantiles = data_for_quartiles.quantile([0.25, 0.50, 0.75])
-            if 0.25 in quantiles.index:
-                k25 = quantiles.loc[0.25]
-            if 0.50 in quantiles.index:
-                k50 = quantiles.loc[0.50]
-            if 0.75 in quantiles.index:
-                k75 = quantiles.loc[0.75]
-
-        # Cálculo da Nota (_3) ---
-        df[nota_col] = np.nan  # Inicializar com NaN
-
-        # Condições baseadas nos quartis
-        # A comparação é feita com a coluna original (df[col])
-        cond1 = pd.notna(k25) & (df[col] <= k25)
-        cond2 = pd.notna(k25) & pd.notna(k50) & (df[col] > k25) & (df[col] <= k50)
-        cond3 = pd.notna(k50) & pd.notna(k75) & (df[col] > k50) & (df[col] <= k75)
-        cond4 = pd.notna(k75) & (df[col] > k75)
-
-        conditions = [cond1, cond2, cond3, cond4]
-        # choices já definido como [-1, 1, 3, 5] no início da função
-
-        df[nota_col] = np.select(conditions, choices, default=np.nan)
-
-        # Limpeza de Colunas Intermediárias
-        if outlier_col in df.columns:
+        if not data_for_quartiles.empty and len(data_for_quartiles.dropna()) >= 4:
             try:
-                del df[outlier_col]
-            except KeyError:
-                pass
+                # Usar interpolação linear, que é comum e similar a algumas opções do SPSS
+                quantiles = data_for_quartiles.quantile(
+                    [0.25, 0.50, 0.75], interpolation="linear"
+                )
+                k25 = quantiles.get(0.25, np.nan)
+                k50 = quantiles.get(0.50, np.nan)
+                k75 = quantiles.get(0.75, np.nan)
+            except Exception:
+                k25, k50, k75 = np.nan, np.nan, np.nan
+
+        # Aplicar a TODOS os valores não-NaN na coluna original.
+        # Outliers (que não estão no calculo de K) e NaNs originais ficarão NaN.
+
+        # Verificar se K foram calculados antes de definir condições
+        if pd.notna(k25) and pd.notna(k50) and pd.notna(k75):
+            cond_q1 = numeric_col_check <= k25
+            # Garantir exclusividade entre <=k25 e >k25
+            cond_q2 = (numeric_col_check > k25) & (numeric_col_check <= k50)
+            cond_q3 = (numeric_col_check > k50) & (numeric_col_check <= k75)
+            # >k75 cobre o resto dos valores não-NaN
+            cond_q4 = numeric_col_check > k75
+
+            # Ordem é importante se houver sobreposição (não deve haver com > e <=)
+            conditions = [cond_q1, cond_q2, cond_q3, cond_q4]
+            choices = [-1, 1, 3, 5]
+
+            # Aplicar np.select. O default=np.nan lida com NaNs originais
+            # e com os outliers (que não satisfarão nenhuma condição se K são válidos)
+            df[nota_col] = np.select(conditions, choices, default=np.nan)
+        # else: Se os K não puderam ser calculados, a nota permanece NaN.
+
+        del df[outlier_col]
+
+    # Selecionar colunas finais
     cols_to_keep_final = []
     if "id" in df.columns:
         cols_to_keep_final.append("id")
     cols_to_keep_final.extend([nc for nc in nota_cols_final if nc in df.columns])
+    existing_cols_to_keep = [col for col in cols_to_keep_final if col in df.columns]
 
-    return df[cols_to_keep_final].copy()
+    return df[existing_cols_to_keep].copy()
 
 
 def nota_final(df: pd.DataFrame, colunas: List[str]) -> pd.DataFrame:
