@@ -105,6 +105,7 @@ df_tdm.to_csv(
     "D:/CEI/BI_ANFACER/BI/arquivos/tdm.csv", sep=";", index=False, encoding="utf-8"
 )
 
+df_comexstat.to_csv("data/comexstat.csv", sep=";", index=False, encoding="utf-8")
 df_tdm.to_csv("data/tdm.csv", sep=";", index=False, encoding="utf-8")
 
 # Loucas Sanitarias
@@ -156,7 +157,6 @@ df_tdm_sanitarios.to_csv(
     encoding="utf-8",
 )
 df_tdm_sanitarios.to_csv("data/tdm_loucas.csv", sep=";", index=False, encoding="utf-8")
-
 print("Script finalizado, arquivos salvos")
 script_end_time = time.time()
 total_elapsed_time = script_end_time - script_start_time
