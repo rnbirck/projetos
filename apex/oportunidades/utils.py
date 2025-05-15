@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 
 def ajuste_tradutores(tradutor, colunas_tamanhos):
@@ -426,4 +427,320 @@ def gerar_oportunidades_potenciais(
         .sort_values("exp_oport_trad", ascending=True)
         .reset_index(drop=True)[:30][cols_finais]
         .round(2)
+    )
+
+
+def gerar_exp_regiao(df_exp_completa, tradutor_uf_regiao):
+    return (
+        df_exp_completa.merge(
+            tradutor_uf_regiao, left_on="SG_UF_NCM", right_on="uf", how="left"
+        )
+        .groupby(["CO_ANO", "regiao"], as_index=False)
+        .agg(EXP_REGIAO=("VL_FOB", "sum"))
+    )
+
+
+def gerar_part_exp_uf_regiao(
+    df_exp_completa, tradutor_uf_regiao, df_exp_regiao, uf_selecionada
+):
+    return (
+        df_exp_completa.merge(
+            tradutor_uf_regiao, left_on="SG_UF_NCM", right_on="uf", how="left"
+        )
+        .groupby(["CO_ANO", "regiao", "SG_UF_NCM"], as_index=False)
+        .agg(EXP_UF=("VL_FOB", "sum"))
+        .merge(df_exp_regiao, on=["CO_ANO", "regiao"], how="left")
+        .assign(PART_EXP_REGIAO=lambda x: x["EXP_UF"] / x["EXP_REGIAO"])
+        .query(f"SG_UF_NCM == '{uf_selecionada}'")
+        .reset_index(drop=True)[
+            ["CO_ANO", "SG_UF_NCM", "regiao", "EXP_UF", "EXP_REGIAO", "PART_EXP_REGIAO"]
+        ]
+    )
+
+
+def gerar_exp_uf_regiao(df_exp_completa, tradutor_uf_regiao, ano_minimo, ano_maximo):
+    return (
+        df_exp_completa.merge(
+            tradutor_uf_regiao, left_on="SG_UF_NCM", right_on="uf", how="left"
+        )
+        .query(f"CO_ANO in ({ano_minimo}, {ano_maximo}) & SG_UF_NCM != 'ND'")
+        .groupby(["CO_ANO", "SG_UF_NCM", "nome_uf", "regiao"], as_index=False)["VL_FOB"]
+        .sum()
+        .pivot_table(
+            index=["SG_UF_NCM", "nome_uf", "regiao"],
+            columns="CO_ANO",
+            values="VL_FOB",
+        )
+        .sort_values(ano_maximo, ascending=False)
+        .reset_index()
+        .assign(posicao=lambda x: x.index + 1)
+    )
+
+
+def gerar_exp_uf_historico(df_exp_completa, uf_selecionada):
+    return (
+        df_exp_completa.query(f"SG_UF_NCM == '{uf_selecionada}'")
+        .groupby(["CO_ANO"], as_index=False)["VL_FOB"]
+        .sum()
+    )
+
+
+def gerar_exp_via(df_exp_completa, uf_selecionada, tradutor_via):
+    return (
+        df_exp_completa.query(f"SG_UF_NCM == '{uf_selecionada}'")
+        .groupby(["CO_ANO", "SG_UF_NCM", "CO_VIA"], as_index=False)["VL_FOB"]
+        .sum()
+        .assign(CO_VIA=lambda x: x["CO_VIA"].astype(str))
+        .merge(tradutor_via, left_on="CO_VIA", right_on="id_via", how="left")
+        .drop(columns=["CO_VIA"])
+    )
+
+
+def gerar_balanca_comercial(df_exp_completa, df_imp_completa, uf_selecionada):
+    return (
+        pd.concat(
+            [
+                df_exp_completa.query(f"SG_UF_NCM == '{uf_selecionada}'")
+                .groupby(["CO_ANO", "SG_UF_NCM"], as_index=False)["VL_FOB"]
+                .sum()
+                .assign(FLUXO="EXP"),
+                df_imp_completa.query(f"SG_UF_NCM == '{uf_selecionada}'")
+                .groupby(["CO_ANO", "SG_UF_NCM"], as_index=False)["VL_FOB"]
+                .sum()
+                .assign(FLUXO="IMP"),
+            ]
+        )
+        .pivot_table(index=["CO_ANO", "SG_UF_NCM"], columns="FLUXO", values="VL_FOB")
+        .reset_index()
+        .assign(SALDO=lambda x: x["EXP"] - x["IMP"])
+    )
+
+
+def gerar_exp_mun_uf(
+    df_exp_mun, uf_selecionada, ano_minimo, tradutor_sh4, tradutor_mun
+):
+    return (
+        df_exp_mun.query(f"SG_UF_MUN == '{uf_selecionada}' & CO_ANO >= {ano_minimo}")
+        .groupby(["CO_ANO", "SH4", "SG_UF_MUN", "CO_MUN"], as_index=False)["VL_FOB"]
+        .sum()
+        .assign(
+            SH4=lambda x: x["SH4"]
+            .astype(str)
+            .str.pad(width=4, side="left", fillchar="0")
+        )
+        .merge(tradutor_sh4, left_on="SH4", right_on="id_sh4", how="left")
+        .merge(tradutor_mun, left_on="CO_MUN", right_on="id_mun", how="left")
+    )
+
+
+def gerar_exp_part_mun(df_exp_mun_uf, ano_maximo):
+    return (
+        df_exp_mun_uf.query(f"CO_ANO == {ano_maximo}")
+        .groupby(["CO_ANO", "SG_UF_MUN", "mun"], as_index=False)
+        .agg(VL_FOB_MUN=("VL_FOB", "sum"))
+        .merge(
+            df_exp_mun_uf.query(f"CO_ANO == {ano_maximo}")
+            .groupby(["CO_ANO", "SG_UF_MUN"], as_index=False)
+            .agg(VL_FOB_UF=("VL_FOB", "sum")),
+            on=["CO_ANO", "SG_UF_MUN"],
+            how="left",
+        )
+        .assign(PART_UF=lambda x: (x["VL_FOB_MUN"] / x["VL_FOB_UF"]) * 100)
+        .sort_values("VL_FOB_MUN", ascending=False)
+        .head(n=5)
+        .drop(columns=["VL_FOB_UF"])
+    )
+
+
+def gerar_exp_mun_sh4(df_exp_mun_uf, ano_maximo, filtro_mun):
+    return (
+        df_exp_mun_uf.query(f"CO_ANO == {ano_maximo}")
+        .sort_values("VL_FOB", ascending=False)
+        .groupby("mun")
+        .head(3)
+        .reset_index(drop=True)
+        .assign(
+            id_desc_sh4=lambda x: x["id_sh4"] + " - " + x["desc_sh4"],
+        )
+        .merge(
+            df_exp_mun_uf.query(f"CO_ANO == {ano_maximo}")
+            .groupby(["CO_ANO", "SG_UF_MUN", "id_sh4"], as_index=False)
+            .agg(VL_FOB_MUN=("VL_FOB", "sum")),
+            on=["CO_ANO", "SG_UF_MUN", "id_sh4"],
+        )
+        .assign(PART_UF_SH4=lambda x: (x["VL_FOB"] / x["VL_FOB_MUN"]) * 100)
+        .query("mun.isin(@filtro_mun)")[
+            ["CO_ANO", "SG_UF_MUN", "mun", "id_desc_sh4", "PART_UF_SH4", "VL_FOB"]
+        ]
+        .sort_values(["mun", "VL_FOB"], ascending=[True, False])
+        .reset_index(drop=True)
+    )
+
+
+def gerar_exp_mesorregioes(
+    df_exp_mun, uf_selecionada, ano_minimo, ano_maximo, tradutor_mesorregiao
+):
+    return (
+        df_exp_mun.query(
+            f"CO_ANO in ({ano_minimo}, {ano_maximo}) & SG_UF_MUN == '{uf_selecionada}'"
+        )
+        .groupby(["CO_ANO", "SG_UF_MUN", "CO_MUN"], as_index=False)["VL_FOB"]
+        .sum()
+        .astype({"CO_MUN": str})
+        .merge(
+            tradutor_mesorregiao, left_on="CO_MUN", right_on="id_municipio", how="left"
+        )
+        .groupby(["CO_ANO", "nome_mesorregiao"], as_index=False)["VL_FOB"]
+        .sum()
+        .pivot_table(index="nome_mesorregiao", columns="CO_ANO", values="VL_FOB")
+        .reset_index()
+        .sort_values(ano_maximo, ascending=False)
+    )
+
+
+def gerar_exp_macrossetores(
+    df_exp_completa, uf_selecionada, ano_minimo, ano_maximo, tradutor_ncm, tradutor_isic
+):
+    return (
+        df_exp_completa.query(
+            f"CO_ANO >= {ano_minimo} & CO_ANO <= {ano_maximo} & SG_UF_NCM == '{uf_selecionada}'"
+        )
+        .assign(
+            CO_NCM=lambda x: x["CO_NCM"].astype(str).str.zfill(8),
+        )
+        .merge(tradutor_ncm, left_on="CO_NCM", right_on="id_ncm", how="left")
+        .merge(tradutor_isic, on="id_sh6", how="left")
+        .groupby(["CO_ANO", "SG_UF_NCM", "desc_isic"], as_index=False)["VL_FOB"]
+        .sum()
+        .pivot_table(index="desc_isic", columns="CO_ANO", values="VL_FOB")
+        .reset_index()
+    )
+
+
+def gerar_exp_grupo(
+    df_exp_completa,
+    uf_selecionada,
+    ano_minimo,
+    ano_maximo,
+    tradutor_ncm,
+    tradutor_grupo,
+):
+    return (
+        df_exp_completa.query(
+            f"CO_ANO >= {ano_minimo} & CO_ANO <= {ano_maximo} & SG_UF_NCM == '{uf_selecionada}'"
+        )
+        .assign(
+            CO_NCM=lambda x: x["CO_NCM"].astype(str).str.zfill(8),
+        )
+        .merge(tradutor_ncm, left_on="CO_NCM", right_on="id_ncm", how="left")
+        .merge(tradutor_grupo, on="id_sh6", how="left")
+        .groupby(["CO_ANO", "SG_UF_NCM", "desc_grupo"], as_index=False)["VL_FOB"]
+        .sum()
+        .pivot_table(index="desc_grupo", columns="CO_ANO", values="VL_FOB")
+        .fillna(0)
+        .sort_values(ano_maximo, ascending=False)
+        .reset_index()
+    )
+
+
+def gerar_exp_destinos(
+    df_exp_completa, ano_minimo, ano_maximo, uf_selecionada, tradutor_pais
+):
+    return (
+        df_exp_completa.query(
+            f"CO_ANO >= {ano_minimo} & CO_ANO <= {ano_maximo} & SG_UF_NCM == '{uf_selecionada}'"
+        )
+        .merge(tradutor_pais, left_on="CO_PAIS", right_on="id_pais", how="left")
+        .groupby(["CO_ANO", "SG_UF_NCM", "pais"], as_index=False)["VL_FOB"]
+        .sum()
+        .pivot_table(index="pais", columns="CO_ANO", values="VL_FOB")
+        .fillna(0)
+        .sort_values(ano_maximo, ascending=False)
+        .reset_index()
+    )
+
+
+def gerar_tabela_auxiliar(
+    df_exp_completa,
+    ano_minimo,
+    ano_maximo,
+    uf_selecionada,
+    tradutor_ncm,
+    tradutor_pais,
+    tradutor_via,
+    tradutor_grupo,
+    tradutor_sh6,
+):
+    return (
+        df_exp_completa.query(
+            f"CO_ANO >= {ano_minimo} & CO_ANO <= {ano_maximo} & SG_UF_NCM == '{uf_selecionada}'"
+        )
+        .assign(
+            CO_NCM=lambda x: x["CO_NCM"].astype(str).str.zfill(8),
+            CO_VIA=lambda x: x["CO_VIA"].astype(str),
+        )
+        .merge(tradutor_ncm, left_on="CO_NCM", right_on="id_ncm", how="left")
+        .groupby(["CO_ANO", "SG_UF_NCM", "id_sh6", "CO_PAIS", "CO_VIA"], as_index=False)
+        .agg({"VL_FOB": "sum"})
+        .merge(tradutor_pais, left_on="CO_PAIS", right_on="id_pais", how="left")
+        .merge(tradutor_via, left_on="CO_VIA", right_on="id_via", how="left")
+        .merge(tradutor_grupo, on="id_sh6", how="left")
+        .merge(tradutor_sh6, on="id_sh6", how="left")[
+            [
+                "CO_ANO",
+                "SG_UF_NCM",
+                "id_sh6",
+                "desc_sh6",
+                "desc_grupo",
+                "pais",
+                "via",
+                "VL_FOB",
+            ]
+        ]
+    )
+
+
+def gerar_tabela_auxiliar_uf(
+    df_exp_mun,
+    ano_minimo,
+    ano_maximo,
+    uf_selecionada,
+    tradutor_sh4,
+    tradutor_mun,
+    tradutor_pais,
+    tradutor_mesorregiao,
+):
+    return (
+        df_exp_mun.query(
+            f"CO_ANO >= {ano_minimo} & CO_ANO <= {ano_maximo} & SG_UF_MUN == '{uf_selecionada}'"
+        )
+        .groupby(["CO_ANO", "SH4", "CO_PAIS", "SG_UF_MUN", "CO_MUN"], as_index=False)[
+            "VL_FOB"
+        ]
+        .sum()
+        .assign(
+            SH4=lambda x: x["SH4"]
+            .astype(str)
+            .str.pad(width=4, side="left", fillchar="0")
+        )
+        .merge(tradutor_sh4, left_on="SH4", right_on="id_sh4", how="left")
+        .merge(tradutor_mun, left_on="CO_MUN", right_on="id_mun", how="left")
+        .merge(tradutor_pais, left_on="CO_PAIS", right_on="id_pais", how="left")
+        .merge(
+            tradutor_mesorregiao.astype({"id_municipio": int}),
+            left_on="CO_MUN",
+            right_on="id_municipio",
+            how="left",
+        )[
+            [
+                "CO_ANO",
+                "SG_UF_MUN",
+                "mun",
+                "id_sh4",
+                "desc_sh4",
+                "pais",
+                "nome_mesorregiao",
+                "VL_FOB",
+            ]
+        ]
     )
