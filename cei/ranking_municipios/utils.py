@@ -67,6 +67,9 @@ GROUP BY ano, id_municipio
 caminho_populacao = caminho_prefeituras + "Demografia_PIB/populacao_estimada.csv"
 caminho_comex = caminho_prefeituras + "Comex/comex.csv"
 caminho_renda = caminho_prefeituras + "Emprego e Renda/RAIS/VINCULOS/rais_renda_rs.csv"
+caminho_vulnerabilidade_social = (
+    caminho_prefeituras + "Assistencia Social/cadastro_unico.csv"
+)
 caminho_seguranca = caminho_prefeituras + "Segurança/seguranca.csv"
 caminho_saude = caminho_prefeituras + "Saúde/df_saude_mensal.csv"
 caminho_sisab = caminho_prefeituras + "Saúde/base_sisab_dash.csv"
@@ -189,6 +192,34 @@ def ajustes_geracao_emprego_per_capita(caged_raw, caged_antigo_raw, populacao):
             * 1000
         )
         .drop(columns=["saldo_movimentacao", "populacao"])
+    )
+
+
+def ajustes_vulnerabilidade_social(populacao, ano_minimo, ano_maximo):
+    return (
+        pd.read_csv(caminho_vulnerabilidade_social, engine="pyarrow")
+        .query(f"ano >= {ano_minimo} and ano <= {ano_maximo} and mes == 12")[
+            [
+                "ano",
+                "id_municipio",
+                "Quantidade total de pessoas inscritas no Cadastro Único",
+            ]
+        ]
+        .rename(
+            columns={
+                "Quantidade total de pessoas inscritas no Cadastro Único": "qtd_cad_unico"
+            }
+        )
+        .astype({"id_municipio": str})
+        .merge(
+            populacao,
+            how="left",
+            on=["ano", "id_municipio"],
+        )
+        .assign(
+            vulnerabilidade_social=lambda x: x["qtd_cad_unico"] / x["populacao"],
+        )
+        .drop(columns=["qtd_cad_unico", "populacao"])
     )
 
 

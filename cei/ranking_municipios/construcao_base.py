@@ -68,6 +68,11 @@ geracao_emprego_per_capita = utils.ajustes_geracao_emprego_per_capita(
     populacao=populacao,
 )
 
+# Vulnerabilidade Social
+vulnerabilidade_social = utils.ajustes_vulnerabilidade_social(
+    populacao=populacao, ano_minimo=ano_minimo, ano_maximo=ano_maximo
+)
+
 # Indicadores Financeiros
 indicadores_financeiros = (
     pd.read_csv(
@@ -128,8 +133,7 @@ emissao_gases_per_capita = utils.ajuste_emissao(
 # Agua
 agua_raw = client.query(utils.query_snis).to_dataframe()
 agua = utils.ajuste_agua(df_raw=agua_raw, populacao=populacao)
-# %%
-importlib.reload(utils)
+
 # Residuos
 residuos = utils.ajuste_residuos(
     municipios=municipios,
@@ -159,6 +163,11 @@ df_formalidade_mercado_trabalho = utils.ajuste_df(
 # GERACAO DE EMPREGO PER CAPITA
 df_geracao_emprego_per_capita = utils.ajuste_df(
     geracao_emprego_per_capita, "geracao_emprego_per_capita"
+)
+
+# VULNERABILIDADE SOCIAL
+df_vulnerabilidade_social = utils.ajuste_df(
+    vulnerabilidade_social, "vulnerabilidade_social"
 )
 
 # INDICADORES FINANCEIROS
@@ -276,7 +285,7 @@ df_agua = utils.ajuste_df_lista(agua, lista_agua)
 # RESIDUOS
 df_residuos = utils.ajuste_df(residuos, "prop_coleta_residuos")
 
-
+# %%
 # Arquivos Finais
 
 # 2024
@@ -289,6 +298,7 @@ dataframes_para_juntar_2024 = [
     (df_vinculos_per_capita, "2023"),
     (df_formalidade_mercado_trabalho, "2023"),
     (df_geracao_emprego_per_capita, "2024"),
+    (df_vulnerabilidade_social, "2024"),
     (df_indicadores_financeiros, "2024"),
     (df_indicadores_seguranca, "2024"),
     (df_indicadores_violencia_mulher, "2024"),
@@ -326,6 +336,7 @@ dataframes_para_juntar_2023 = [
     (df_vinculos_per_capita, "2022"),
     (df_formalidade_mercado_trabalho, "2022"),
     (df_geracao_emprego_per_capita, "2023"),
+    (df_vulnerabilidade_social, "2023"),
     (df_indicadores_financeiros, "2023"),
     (df_indicadores_seguranca, "2023"),
     (df_indicadores_violencia_mulher, "2023"),
@@ -362,6 +373,7 @@ dataframes_para_juntar_2022 = [
     (df_vinculos_per_capita, "2021"),
     (df_formalidade_mercado_trabalho, "2021"),
     (df_geracao_emprego_per_capita, "2022"),
+    (df_vulnerabilidade_social, "2022"),
     (df_indicadores_financeiros, "2022"),
     (df_indicadores_seguranca, "2022"),
     (df_indicadores_violencia_mulher, "2022"),
@@ -398,6 +410,7 @@ dataframes_para_juntar_2021 = [
     (df_vinculos_per_capita, "2020"),
     (df_formalidade_mercado_trabalho, "2020"),
     (df_geracao_emprego_per_capita, "2021"),
+    (df_vulnerabilidade_social, "2021"),
     (df_indicadores_financeiros, "2021"),
     (df_indicadores_seguranca, "2021"),
     (df_indicadores_violencia_mulher, "2021"),
@@ -434,6 +447,7 @@ dataframes_para_juntar_2020 = [
     (df_vinculos_per_capita, "2019"),
     (df_formalidade_mercado_trabalho, "2019"),
     (df_geracao_emprego_per_capita, "2020"),
+    (df_vulnerabilidade_social, "2020"),
     (df_indicadores_financeiros, "2020"),
     (df_indicadores_seguranca, "2020"),
     (df_indicadores_violencia_mulher, "2020"),
@@ -470,6 +484,7 @@ dataframes_para_juntar_2019 = [
     (df_vinculos_per_capita, "2018"),
     (df_formalidade_mercado_trabalho, "2018"),
     (df_geracao_emprego_per_capita, "2019"),
+    (df_vulnerabilidade_social, "2019"),
     (df_indicadores_financeiros, "2019"),
     (df_indicadores_seguranca, "2019"),
     (df_indicadores_violencia_mulher, "2019"),
