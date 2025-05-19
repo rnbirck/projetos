@@ -1293,20 +1293,8 @@ def calcular_notas_bloco(
     # Calcular a média e 3. Categorizar para cada bloco
     blocos_processados = 0
     for bloco, lista_cols_nota in bloco_para_notas_cols.items():
-        # --- Clean block name (unchanged) ---
-        bloco_clean_name = bloco.lower()
-        bloco_clean_name = re.sub(r"[áàâãä]", "a", bloco_clean_name)
-        bloco_clean_name = re.sub(r"[éèêë]", "e", bloco_clean_name)
-        bloco_clean_name = re.sub(r"[íìîï]", "i", bloco_clean_name)
-        bloco_clean_name = re.sub(r"[óòôõö]", "o", bloco_clean_name)
-        bloco_clean_name = re.sub(r"[úùûü]", "u", bloco_clean_name)
-        bloco_clean_name = re.sub(r"[ç]", "c", bloco_clean_name)
-        bloco_clean_name = re.sub(r"[\s-]+", "_", bloco_clean_name)
-        bloco_clean_name = re.sub(r"[^\w_]+", "", bloco_clean_name)
-        bloco_clean_name = re.sub(r"_+", "_", bloco_clean_name).strip("_")
-
-        media_col = f"media_bloco_{bloco_clean_name}"
-        nota_final_col = f"nota_bloco_{bloco_clean_name}"
+        media_col = f"media_bloco_{bloco}"
+        nota_final_col = f"nota_bloco_{bloco}"
 
         cols_existentes_neste_bloco = [
             c for c in lista_cols_nota if c in df_result.columns
@@ -1521,3 +1509,177 @@ def renomear_colunas_mapeadas(
             rename_mapping[current_col] = current_col
 
     return df.rename(columns=rename_mapping)
+
+
+def mapear_colunas_para_blocos_excel(
+    df_para_formatar, df_classificacao, nome_col_descricoes
+):
+    """
+    Mapeia colunas do df_para_formatar para blocos definidos em df_classificacao.
+    Retorna um dicionário {nome_bloco: [lista_de_colunas_do_bloco_presentes_em_df_para_formatar]}.
+    """
+    colunas_por_bloco = {}
+
+    if not isinstance(df_para_formatar, pd.DataFrame) or not isinstance(
+        df_classificacao, pd.DataFrame
+    ):
+        return colunas_por_bloco
+    if (
+        "var" not in df_classificacao.columns
+        or nome_col_descricoes not in df_classificacao.columns
+    ):
+        return colunas_por_bloco
+
+    map_var_to_descricao = df_classificacao.set_index("var")[
+        nome_col_descricoes
+    ].to_dict()
+
+    if (
+        "bloco" in df_classificacao.columns
+        and not df_classificacao["bloco"].dropna().empty
+    ):
+        blocos_unicos = df_classificacao["bloco"].dropna().unique()
+
+        for bloco_nome in blocos_unicos:
+            lista_cols_neste_bloco = []
+            vars_no_bloco = df_classificacao[df_classificacao["bloco"] == bloco_nome][
+                "var"
+            ].tolist()
+
+            for var_original in vars_no_bloco:
+                if var_original in map_var_to_descricao:
+                    descricao_col_name = map_var_to_descricao[var_original]
+                    if descricao_col_name in df_para_formatar.columns:
+                        lista_cols_neste_bloco.append(descricao_col_name)
+
+                    nome_nota_final = f"nota_{descricao_col_name}"
+                    if nome_nota_final in df_para_formatar.columns:
+                        lista_cols_neste_bloco.append(nome_nota_final)
+
+            # Adicionar colunas de média e nota do bloco se existirem
+            media_bloco_col = f"media_bloco_{bloco_nome}"
+            if media_bloco_col in df_para_formatar.columns:
+                lista_cols_neste_bloco.append(media_bloco_col)
+
+            nota_bloco_col = f"nota_bloco_{bloco_nome}"
+            if nota_bloco_col in df_para_formatar.columns:
+                lista_cols_neste_bloco.append(nota_bloco_col)
+
+            if (
+                lista_cols_neste_bloco
+            ):  # Adiciona apenas se encontrou colunas para o bloco
+                colunas_por_bloco[bloco_nome] = sorted(
+                    list(set(lista_cols_neste_bloco))
+                )
+    return colunas_por_bloco
+
+
+def definir_cores_para_blocos_excel(colunas_por_bloco, paleta_cores=None):
+    """Cria um dicionário mapeando nomes de blocos para cores."""
+    if paleta_cores is None:
+        paleta_cores = [
+            "#FFFFE0",
+            "#ADD8E6",
+            "#FFB6C1",
+            "#90EE90",
+            "#FFDAB9",
+            "#E6E6FA",
+            "#AFEEEE",
+            "#F0E68C",
+        ]
+    if (
+        not colunas_por_bloco or not paleta_cores
+    ):  # Se não há blocos ou cores, retorna mapa vazio
+        return {}
+
+    return {
+        bloco: paleta_cores[i % len(paleta_cores)]
+        for i, bloco in enumerate(colunas_por_bloco.keys())
+    }
+
+
+def iniciar_excel_e_escrever_dados(
+    df_para_salvar, nome_arquivo_saida, nome_planilha="ranqueamento"
+):
+    """Inicia o ExcelWriter e escreve os dados do DataFrame, sem cabeçalho, a partir da segunda linha."""
+    try:
+        writer = pd.ExcelWriter(nome_arquivo_saida, engine="xlsxwriter")
+        df_para_salvar.to_excel(
+            writer, index=False, sheet_name=nome_planilha, header=False, startrow=1
+        )
+        workbook = writer.book
+        worksheet = writer.sheets[nome_planilha]
+        return writer, workbook, worksheet
+    except Exception as e:
+        print(f"ERRO CRÍTICO ao iniciar ExcelWriter ou escrever dados: {e}")
+        return None, None, None
+
+
+def formatar_cabecalhos_e_colunas_excel(
+    worksheet, workbook, df_para_formatar, colunas_por_bloco, mapa_cores_blocos
+):
+    """Aplica formatação de cabeçalho, cor de fundo de bloco e largura às colunas."""
+    if (
+        worksheet is None
+        or workbook is None
+        or not isinstance(df_para_formatar, pd.DataFrame)
+    ):
+        return
+
+    default_header_format = workbook.add_format(
+        {
+            "bold": True,
+            "text_wrap": True,
+            "valign": "top",
+            "bg_color": "#F0F0F0",
+            "pattern": 1,
+            "border": 1,
+            "align": "center",
+        }
+    )
+    col_idx_map = {
+        col_name: idx for idx, col_name in enumerate(df_para_formatar.columns)
+    }
+
+    for col_name, col_idx in col_idx_map.items():
+        header_text = str(col_name)
+        header_format_to_apply = default_header_format
+        current_data_cell_format = None
+
+        if colunas_por_bloco:
+            for bloco_nome, colunas_do_bloco in colunas_por_bloco.items():
+                if col_name in colunas_do_bloco:
+                    background_color = mapa_cores_blocos.get(bloco_nome, "#FFFFFF")
+                    header_format_to_apply = workbook.add_format(
+                        {
+                            "bold": True,
+                            "text_wrap": True,
+                            "valign": "top",
+                            "border": 1,
+                            "align": "center",
+                            "font_color": "black",
+                            "bg_color": background_color,
+                            "pattern": 1,
+                        }
+                    )
+                    current_data_cell_format = workbook.add_format(
+                        {"bg_color": background_color, "pattern": 1}
+                    )
+                    break
+
+        worksheet.write(0, col_idx, header_text, header_format_to_apply)
+
+        max_len = len(header_text)
+        if (
+            col_name in df_para_formatar.columns
+            and not df_para_formatar[col_name].empty
+        ):
+            try:
+                col_max_len = df_para_formatar[col_name].astype(str).map(len).max()
+                if pd.notna(col_max_len):
+                    max_len = max(max_len, int(col_max_len))
+            except Exception:
+                pass
+
+        adjusted_width = min(max(10, max_len + 3), 40)
+        worksheet.set_column(col_idx, col_idx, adjusted_width, current_data_cell_format)

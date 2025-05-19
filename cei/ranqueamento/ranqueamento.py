@@ -3,11 +3,13 @@ import pandas as pd
 import numpy as np
 import utils
 import importlib
+import os
 
 importlib.reload(utils)
 
 print("Iniciando ranqueamento")
-arquivo = "municipios"
+arquivo = "municipios_2019"
+colunas_de_renomeacao = "descricao"  # pode ser ou "descricao" ou "coluna"
 
 base = pd.read_excel(
     f"bases/base_{arquivo}.xlsx",
@@ -150,13 +152,15 @@ df_reordenada = utils.ordenar_df_com_notas(
 
 # Renomeando e criando o dataframe final
 df_final = utils.renomear_colunas_mapeadas(
-    df=df_reordenada, map_df=classificacao, map_from_col="var", map_to_col="coluna"
+    df=df_reordenada,
+    map_df=classificacao,
+    map_from_col="var",
+    map_to_col=f"{colunas_de_renomeacao}",
 )
-
-# Calculando a média geral dos blocos, se existir
-colunas_nota_bloco = [col for col in df_final.columns if col.startswith("nota_bloco_")]
+# Calculando a média geral das médias dos blocos, se existir
+colunas_nota_bloco = [col for col in df_final.columns if col.startswith("media_bloco_")]
 if colunas_nota_bloco:
-    nome_nova_coluna = "media_geral_blocos"
+    nome_nova_coluna = "Média Geral dos Blocos"
     try:
         df_final[nome_nova_coluna] = df_final[colunas_nota_bloco].mean(
             axis=1, skipna=True
@@ -165,9 +169,50 @@ if colunas_nota_bloco:
         if nome_nova_coluna in df_final.columns:
             del df_final[nome_nova_coluna]
 
-# Salvando o arquivo
-arquivo_saida = f"resultados/ranqueamento_{arquivo}.xlsx"
-with pd.ExcelWriter(arquivo_saida) as writer:
-    df_final.to_excel(writer, index=False, sheet_name="ranqueamento")
+# Calculando a média geral das notas dos blocos, se existir
+colunas_nota_bloco = [col for col in df_final.columns if col.startswith("nota_bloco_")]
+if colunas_nota_bloco:
+    nome_nova_coluna = "Média Geral das Notas dos Blocos"
+    try:
+        df_final[nome_nova_coluna] = df_final[colunas_nota_bloco].mean(
+            axis=1, skipna=True
+        )
+    except Exception:
+        if nome_nova_coluna in df_final.columns:
+            del df_final[nome_nova_coluna]
 
-print(f"Ranqueamento finalizado. Arquivo salvo em: {arquivo_saida}")
+df_final = df_final.round(3)
+
+# Mapear colunas para blocos
+colunas_por_bloco = utils.mapear_colunas_para_blocos_excel(
+    df_final, classificacao, colunas_de_renomeacao
+)
+
+# Definir cores para os blocos (pode passar sua paleta personalizada aqui se quiser)
+mapa_cores = utils.definir_cores_para_blocos_excel(colunas_por_bloco)
+
+# Iniciar o ExcelWriter e escrever os dados (sem cabeçalho)
+caminho_saida = "resultados"
+if not os.path.exists(caminho_saida):
+    os.makedirs(caminho_saida)
+arquivo_saida_excel = os.path.join(caminho_saida, f"ranqueamento_{arquivo}.xlsx")
+nome_da_planilha = "ranqueamento"
+
+writer, workbook, worksheet = utils.iniciar_excel_e_escrever_dados(
+    df_final, arquivo_saida_excel, nome_da_planilha
+)
+
+# Aplicar formatação aos cabeçalhos e colunas
+if writer:
+    utils.formatar_cabecalhos_e_colunas_excel(
+        worksheet, workbook, df_final, colunas_por_bloco, mapa_cores
+    )
+
+    # Salvar e fechar o arquivo Excel
+    try:
+        writer.close()
+        print(f"Arquivo Excel formatado salvo com sucesso em: {arquivo_saida_excel}")
+    except Exception as e_save:
+        print(f"ERRO CRÍTICO ao salvar o arquivo Excel: {e_save}")
+else:
+    print("ERRO: Não foi possível iniciar o escritor de Excel. Arquivo não gerado.")

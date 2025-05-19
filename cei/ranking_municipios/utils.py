@@ -453,9 +453,7 @@ def ajustes_notas_saeb(categoria):
             caminho_notas_saeb,
             engine="pyarrow",
         )
-        .query(
-            f"rede == 'Municipal' & indicador != 'ideb' & categoria == '{categoria}'"
-        )
+        .query(f"rede == 'Pública' & indicador != 'ideb' & categoria == '{categoria}'")
         .pivot_table(
             index=["id_municipio", "ano"],
             columns="indicador",
@@ -485,7 +483,7 @@ def ajustes_rendimento_educacao():
             caminho_rendimento_educacao,
             engine="pyarrow",
         )
-        .query(f"dependencia == 'Municipal' & categoria in {categorias_rendimento}")
+        .query(f"dependencia == 'Total' & categoria in {categorias_rendimento}")
         .pivot_table(
             index=["id_municipio", "ano"],
             columns="categoria",
@@ -504,7 +502,7 @@ def ajustes_adequacao_docentes(ano):
             skiprows=10,
         )
         .query(
-            f"NU_ANO_CENSO == {ano} & SG_UF == 'RS' & NO_DEPENDENCIA == 'Municipal' & NO_CATEGORIA == 'Total'"
+            f"NU_ANO_CENSO == {ano} & SG_UF == 'RS' & NO_DEPENDENCIA == 'Total' & NO_CATEGORIA == 'Total'"
         )
         .assign(
             id_municipio=lambda x: x["CO_MUNICIPIO"].astype(int).astype(str),

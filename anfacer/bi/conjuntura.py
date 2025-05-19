@@ -237,8 +237,13 @@ url_ibc = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.24364/dados?formato=jso
 df_ibc = get_data_bcb(url_ibc, "ibc_br")
 
 # Taxa de Câmbio
-url_cambio = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.3698/dados?formato=json&dataInicial=01/01/2021"
+url_cambio = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.3698/dados?formato=json&dataInicial=01/01/2017"
 df_taxa_cambio = get_data_bcb(url_cambio, "taxa_cambio")
+df_taxa_cambio_capa = (
+    df_taxa_cambio.assign(ano=lambda x: x["mes_ano"].str.split("/").str[1].astype(int))
+    .query("ano >= 2021")
+    .drop(columns=["ano"])
+)
 
 # INCC
 url_incc = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.192/dados?formato=json&dataInicial=01/01/2021"
@@ -392,7 +397,7 @@ df_pib_construcao = ajuste_pib_construcao(df_pib_construcao_raw)
 
 # Merge dos dados
 list_dfs = [
-    df_taxa_cambio,
+    df_taxa_cambio_capa,
     df_ibc,
     df_incc,
     df_selic,
@@ -426,6 +431,11 @@ df_conjuntura = df_conjuntura.melt(
 
 df_conjuntura.to_excel(
     "D:/CEI/BI_ANFACER/BI/arquivos/conjuntura.xlsx",
+    index=False,
+)
+
+df_taxa_cambio.to_excel(
+    "D:/CEI/BI_ANFACER/BI/arquivos/taxa_cambio.xlsx",
     index=False,
 )
 

@@ -7,7 +7,7 @@ import time
 start_time = time.time()
 
 caminho_destino = (
-    "../../OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/Prefeituras/Segurança"
+    "D:/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/Prefeituras/Segurança"
 )
 
 # Configuração do banco de dados
@@ -28,6 +28,7 @@ trad_mun = pd.read_sql_query(query_municipio, engine).assign(
     .str.decode("utf-8")
     .str.replace("-", "", regex=False)
     .str.replace(" ", "", regex=False)
+    .str.replace("'", "", regex=False)
 )
 
 
@@ -53,7 +54,9 @@ def leitura_indicadores_criminais(ano: int):
             .str.encode("ascii", errors="ignore")
             .str.decode("utf-8")
             .str.replace("-", "", regex=False)
-            .str.replace(" ", "", regex=False),
+            .str.replace(" ", "", regex=False)
+            .str.replace("'", "", regex=False)
+            .str.replace("DRMAURICIOCARDOSO", "DOUTORMAURICIOCARDOSO", regex=False),
         )
         return df
 
@@ -79,7 +82,9 @@ def leitura_violencia_mulher(ano: int):
             .str.encode("ascii", errors="ignore")
             .str.decode("utf-8")
             .str.replace("-", "", regex=False)
-            .str.replace(" ", "", regex=False),
+            .str.replace(" ", "", regex=False)
+            .str.replace("'", "", regex=False)
+            .str.replace("DRMAURICIOCARDOSO", "DOUTORMAURICIOCARDOSO", regex=False),
         )
         return df
 
@@ -176,6 +181,7 @@ anos = range(2019, 2026)
 df_indicadores_criminais = pd.concat(
     [leitura_indicadores_criminais(ano=ano) for ano in anos], ignore_index=True
 )
+
 # DataFrame com os indicadores de violência contra a mulher
 df_violencia_mulher = pd.concat(
     [leitura_violencia_mulher(ano) for ano in anos],
