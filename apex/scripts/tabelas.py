@@ -12,7 +12,7 @@ caminho_resultado = "D:/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/APE
 
 print("Iniciando a execução do script de tabelas")
 
-uf_selecionada = "PE"
+uf_selecionada = "SC"
 
 # Tradutores
 tradutor_grupo = pd.read_excel(caminho + "trad_cuci.xlsx", engine="calamine").pipe(

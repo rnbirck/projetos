@@ -5,6 +5,7 @@ import importlib
 from google.cloud import bigquery
 from sqlalchemy import create_engine
 
+print("Executando o script de construção da base de dados...")
 importlib.reload(utils)
 
 billing_project_id = "gold-braid-417822"
@@ -138,10 +139,6 @@ agua = utils.ajuste_agua(df_raw=agua_raw, populacao=populacao)
 residuos = utils.ajuste_residuos(
     municipios=municipios,
 )
-
-# %%
-importlib.reload(utils)
-
 
 # PIB PER CAPITA
 df_pib_per_capita = utils.ajuste_df(pib_per_capita, "pib_per_capita")
@@ -284,8 +281,6 @@ df_agua = utils.ajuste_df_lista(agua, lista_agua)
 
 # RESIDUOS
 df_residuos = utils.ajuste_df(residuos, "prop_coleta_residuos")
-
-# %%
 # Arquivos Finais
 
 # 2024
@@ -344,8 +339,8 @@ dataframes_para_juntar_2023 = [
     (df_obitos_evitaveis_per_capita, "2022"),
     (df_sisab, "2023"),
     (df_matriculas_creche, "2023"),
-    (df_notas_saeb_anos_iniciais, "2022"),
-    (df_notas_saeb_anos_finais, "2022"),
+    (df_notas_saeb_anos_iniciais, "2021"),
+    (df_notas_saeb_anos_finais, "2021"),
     (df_rendimento_distorcao_educacao, "2023"),
     (df_rendimento_abandono_educacao, "2022"),
     (df_adequacao_docentes, "2023"),
@@ -355,7 +350,7 @@ dataframes_para_juntar_2023 = [
     (df_residuos, "2021"),
 ]
 # Loop para realizar todos os merges
-for df_adicional, ano_sufixo in dataframes_para_juntar_2024:
+for df_adicional, ano_sufixo in dataframes_para_juntar_2023:
     df_2023 = utils.realizar_merge_com_selecao_ano(
         df_principal=df_2023,
         df_adicional=df_adicional,
@@ -381,8 +376,8 @@ dataframes_para_juntar_2022 = [
     (df_obitos_evitaveis_per_capita, "2021"),
     (df_sisab, "2022"),
     (df_matriculas_creche, "2022"),
-    (df_notas_saeb_anos_iniciais, "2021"),
-    (df_notas_saeb_anos_finais, "2021"),
+    (df_notas_saeb_anos_iniciais, "2019"),
+    (df_notas_saeb_anos_finais, "2019"),
     (df_rendimento_distorcao_educacao, "2022"),
     (df_rendimento_abandono_educacao, "2021"),
     (df_adequacao_docentes, "2022"),
@@ -418,8 +413,8 @@ dataframes_para_juntar_2021 = [
     (df_obitos_evitaveis_per_capita, "2020"),
     (df_sisab, "2021"),
     (df_matriculas_creche, "2021"),
-    (df_notas_saeb_anos_iniciais, "2020"),
-    (df_notas_saeb_anos_finais, "2020"),
+    (df_notas_saeb_anos_iniciais, "2017"),
+    (df_notas_saeb_anos_finais, "2017"),
     (df_rendimento_distorcao_educacao, "2021"),
     (df_rendimento_abandono_educacao, "2020"),
     (df_adequacao_docentes, "2021"),
@@ -455,8 +450,8 @@ dataframes_para_juntar_2020 = [
     (df_obitos_evitaveis_per_capita, "2019"),
     (df_sisab, "2020"),
     (df_matriculas_creche, "2020"),
-    (df_notas_saeb_anos_iniciais, "2019"),
-    (df_notas_saeb_anos_finais, "2019"),
+    (df_notas_saeb_anos_iniciais, "2015"),
+    (df_notas_saeb_anos_finais, "2015"),
     (df_rendimento_distorcao_educacao, "2020"),
     (df_rendimento_abandono_educacao, "2019"),
     (df_adequacao_docentes, "2020"),
@@ -492,8 +487,8 @@ dataframes_para_juntar_2019 = [
     (df_obitos_evitaveis_per_capita, "2018"),
     (df_sisab, "2019"),
     (df_matriculas_creche, "2019"),
-    (df_notas_saeb_anos_iniciais, "2018"),
-    (df_notas_saeb_anos_finais, "2018"),
+    (df_notas_saeb_anos_iniciais, "2015"),
+    (df_notas_saeb_anos_finais, "2015"),
     (df_rendimento_distorcao_educacao, "2019"),
     (df_rendimento_abandono_educacao, "2018"),
     (df_adequacao_docentes, "2019"),
@@ -521,3 +516,4 @@ for ano in anos:
         index=False,
         engine="openpyxl",
     )
+print("Arquivos salvos com sucesso!")
