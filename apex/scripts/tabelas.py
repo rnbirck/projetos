@@ -190,8 +190,19 @@ df_tabela_auxiliar = utils.gerar_tabela_auxiliar(
     ano_maximo=ano_maximo,
     uf_selecionada=uf_selecionada,
     tradutor_ncm=tradutor_ncm,
+    tradutor_isic=tradutor_isic,
     tradutor_pais=tradutor_pais,
     tradutor_via=tradutor_via,
+    tradutor_grupo=tradutor_grupo,
+    tradutor_sh6=tradutor_sh6,
+)
+
+df_tabela_auxiliar_sh6_pais = utils.gerar_tabela_auxiliar_sh6_pais(
+    df_exp_completa=df_exp_completa,
+    anos=anos,
+    uf_selecionada=uf_selecionada,
+    tradutor_ncm=tradutor_ncm,
+    tradutor_pais=tradutor_pais,
     tradutor_grupo=tradutor_grupo,
     tradutor_sh6=tradutor_sh6,
 )
@@ -206,7 +217,6 @@ df_tabela_auxiliar_uf = utils.gerar_tabela_auxiliar_uf(
     tradutor_pais=tradutor_pais,
     tradutor_mesorregiao=tradutor_mesorregiao,
 )
-
 # Salvando os arquivos
 
 base_tabelas_graficos = f"{uf_selecionada}_base_tabelas_graficos.xlsx"
@@ -237,11 +247,13 @@ with pd.ExcelWriter(
     df_exp_destinos.to_excel(writer, sheet_name="Exportação por Destinos", index=False)
 
 base_tabelas_auxiliares = f"{uf_selecionada}_base_tabelas_auxiliares.xlsx"
-
 with pd.ExcelWriter(
     caminho_resultado + base_tabelas_auxiliares, engine="openpyxl"
 ) as writer:
     df_tabela_auxiliar.to_excel(writer, sheet_name="Base Exp", index=False)
+    df_tabela_auxiliar_sh6_pais.to_excel(
+        writer, sheet_name="Exp SH6 e País", index=False
+    )
     df_tabela_auxiliar_uf.to_excel(writer, sheet_name="Base Exp UF", index=False)
     df_exp_mun_uf.to_excel(writer, sheet_name="Base Exp Municipios", index=False)
 
