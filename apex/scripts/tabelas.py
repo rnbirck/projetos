@@ -12,7 +12,7 @@ caminho_resultado = "D:/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/APE
 
 print("Iniciando a execução do script de tabelas")
 
-uf_selecionada = "SC"
+uf_selecionada = "RN"
 
 # Tradutores
 tradutor_grupo = pd.read_excel(caminho + "trad_cuci.xlsx", engine="calamine").pipe(
@@ -47,6 +47,7 @@ tradutor_sh6 = (
 )
 tradutor_mun = pd.read_excel(caminho + "trad_mun.xlsx", engine="calamine")
 tradutor_pais = pd.read_excel(caminho + "trad_pais.xlsx", engine="calamine")
+
 query_mesorregiao_mun = """
 SELECT
     id_municipio,

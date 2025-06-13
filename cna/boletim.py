@@ -152,9 +152,8 @@ df_imp_mes_total_agro = pd.merge(
     how="left",
     suffixes=("_TOTAL", "_AGRO"),
 )
-
 # SALVANDO OS ARQUIVOS XLSX
-caminho = "C:/Users/rnbirck/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/CNA/Boletim Balança Comercial/RODAR/"
+caminho = "D:/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/CNA/Boletim Balança Comercial/RODAR/"
 
 df_exp_mes_total_agro.to_excel(caminho + "EXP_MES_TOTAL_AGRO.xlsx", index=False)
 df_exp_produto_ncm_pais.to_excel(caminho + "EXP_PRODUTO_NCM_PAIS.xlsx", index=False)
