@@ -9,7 +9,7 @@ importlib.reload(utils)
 caminho = "D:/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/APEX-BRASIL/2023_Estados/Orbis/2025/"
 caminho_resultado = "D:/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/APEX-BRASIL/2023_Estados/Estados/0_resultados_investimentos/2025/"
 
-uf_selecionada = "SC"
+uf_selecionada = "RS"
 regiao_selecionada = "Sul"
 
 tradutor_orbis_cnae = pd.read_excel(caminho + "tradutores/tradutor_orbis_cnae.xlsx")
@@ -194,7 +194,6 @@ orbis_uf = (
         ]
     ]
 )
-
 
 # Salvando os resultados
 with pd.ExcelWriter(

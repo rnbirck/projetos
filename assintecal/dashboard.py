@@ -65,7 +65,7 @@ def leitor_csv(arquivo):
     ]
 
     df = pd.read_csv(
-        f"data/{arquivo}.csv",
+        f"../data/{arquivo}.csv",
         sep=";",
         encoding="ISO-8859-1",
         engine="pyarrow",
@@ -342,7 +342,7 @@ df_producao_raw = sidra.get_table(
     table_code="8885",
     territorial_level="1",
     ibge_territorial_code="all",
-    period="201901-202501",
+    period="201901-202601",
     classification="542/56683,129200",
     variable="11602,11603",
 )
@@ -501,7 +501,9 @@ df_expectativa = pd.merge(
 )
 
 # Salvando os DataFrames em CSV
-destino = "../../OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/ASSINTECAL/Dashboard/data/"
+destino = (
+    "D:/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/ASSINTECAL/Dashboard/data/"
+)
 df_emprego_calcados.to_csv(destino + "df_emprego_calcados.csv", index=False)
 df_emprego_couro.to_csv(destino + "df_emprego_couro.csv", index=False)
 df_producao.to_csv(destino + "df_base_producao.csv", index=False)

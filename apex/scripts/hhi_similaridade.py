@@ -7,7 +7,7 @@ caminho_resultado = "D:/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/APE
 trad_pais = pd.read_excel(caminho_base + "trad_pais.xlsx")
 trad_ncm = pd.read_excel(caminho_base + "ncm_cnae.xlsx")
 
-filtro_uf = "SC"
+filtro_uf = "RS"
 anos = np.arange(2019, 2025, 1)
 
 

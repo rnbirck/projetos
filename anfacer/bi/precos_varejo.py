@@ -8,7 +8,7 @@ import os
 
 importlib.reload(utils)
 
-mes = "03"
+mes = "05"
 ano = "2025"
 
 # Configuração do banco de dados
@@ -130,6 +130,6 @@ df = (
         / x[["pr_promo", "pr_min", "pr_max"]].notna().sum(axis=1)
     )
 )
-df.to_sql("preco_varejo", con=engine, if_exists="append", index=False)
+df.to_sql("anfacer_precos", con=engine, if_exists="append", index=False)
 
 print(f"Total de registros inseridos: {len(df)}")

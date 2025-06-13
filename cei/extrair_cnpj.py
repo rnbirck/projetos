@@ -3,12 +3,10 @@ import os
 import zipfile
 
 ano = 2025
-mes = 4
+mes = 5
 mes_formatado = f"{mes:02}"
 
-BASE_URL = "https://arquivos.receitafederal.gov.br/dados/cnpj/dados_abertos_cnpj/"
-URL = f"{BASE_URL}{ano}-{mes_formatado}/"
-DOWNLOAD_DIR = "data/cnpj/"
+DOWNLOAD_DIR = "../data/cnpj/"
 directory_name = f"{ano}-{mes_formatado}/"
 directory_path = os.path.join(DOWNLOAD_DIR, directory_name)
 

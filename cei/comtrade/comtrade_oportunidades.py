@@ -7,9 +7,9 @@ import time
 
 subscription_key = "cab30bdb6ad34b5e8b7bef73cadb9b68"
 
-pais = "Arabia_Saudita"
+pais = "China"
 cod_reporter = 76  # Brasil
-cod_partner = 682  # Arabia Saudita
+cod_partner = 156  # China
 
 caminho_resultados = f"D:/OneDrive - Associacao Antonio Vieira/UAPP_ProjetoCEI/PROGRAMACAO/OPORTUNIDADES_MARKET_SHARE/{pais}/ORIGINAL/"
 # Colunas de interesse
